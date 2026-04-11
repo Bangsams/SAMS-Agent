@@ -23,13 +23,18 @@ auth_uri = "https://accounts.google.com/o/oauth2/auth"
 token_uri = "https://oauth2.googleapis.com/token"
 auth_provider_x509_cert_url = "https://www.googleapis.com/oauth2/v1/certs"
 client_x509_cert_url = "https://www.googleapis.com/robot/v1/metadata/x509/sams-agent-823%40sams-agent-493004.iam.gserviceaccount.com"
+[google_calendar]
+calendar_id = "your-email@gmail.com"   ← ID kalender Google Anda (biasanya email)
+timezone    = "Asia/Jakarta"
+
 ─────────────────────────────────────────────────
 Langkah Setup:
   1. Buat Google Service Account di console.cloud.google.com
-  2. Aktifkan Google Sheets API + Google Drive API
+  2. Aktifkan Google Sheets API + Google Drive API + Google Calendar API
   3. Paste nilai dari JSON key ke [gcp_service_account] di secrets.toml
   4. Share spreadsheet ke client_email dengan role Editor
-  5. Salin Spreadsheet ID dari URL spreadsheet
+  5. Share Google Calendar ke client_email dengan role "Make changes to events"
+  6. Salin Spreadsheet ID dari URL spreadsheet
 """
 
 import streamlit as st
@@ -39,8 +44,8 @@ from typing import Optional
 
 # ── PAGE CONFIG ──────────────────────────────────────────────────────────────
 st.set_page_config(
-    page_title="SAMS Financial Agent",
-    page_icon="💰",
+    page_title="SAMS Agent",
+    page_icon="🌿",
     layout="wide",
     initial_sidebar_state="collapsed",
 )
@@ -243,6 +248,7 @@ def get_gspread_client():
         scopes = [
             "https://www.googleapis.com/auth/spreadsheets",
             "https://www.googleapis.com/auth/drive",
+            "https://www.googleapis.com/auth/calendar",
         ]
         creds = Credentials.from_service_account_info(info, scopes=scopes)
         return gspread.authorize(creds)
@@ -440,6 +446,191 @@ def call_ai(messages: list) -> str:
         return f"❌ Error AI: {e}"
 
 
+
+SYSTEM_TODO = """Kamu adalah SAMS Todo Agent, asisten jadwal cerdas berbahasa Indonesia.
+Tugasmu: ekstrak informasi kegiatan dari pesan user dan simpan ke Google Calendar.
+
+Jika user menyebutkan kegiatan/aktivitas, ekstrak dan balas dengan JSON ini (plus kalimat ramah):
+{"action":"add_event","title":"...","date":"YYYY-MM-DD","start_time":"HH:MM","end_time":"HH:MM","description":"...","location":"..."}
+
+Aturan:
+- "date" format YYYY-MM-DD. Jika user bilang "besok", hitung dari hari ini.
+- "start_time" dan "end_time" format HH:MM (24 jam).
+- Jika end_time tidak disebutkan, tambahkan 1 jam dari start_time.
+- "location" boleh kosong string "" jika tidak disebutkan.
+- Jika tidak ada kegiatan baru, balas normal tanpa JSON.
+- Selalu konfirmasi detail yang kamu tangkap dengan ramah.
+Hari ini: {today}
+Gunakan bahasa Indonesia yang ramah dan singkat."""
+
+
+def call_ai_todo(messages: list) -> str:
+    """AI call khusus Todo Agent dengan system prompt todo."""
+    if st.session_state.get("budget_exceeded"):
+        return "⚠️ Budget sesi habis. Refresh halaman untuk memulai sesi baru."
+
+    used_usd = tokens_to_usd(st.session_state.get("total_tokens", 0))
+    remaining = MAX_BUDGET_USD - used_usd
+    if remaining <= 0:
+        st.session_state["budget_exceeded"] = True
+        return "⚠️ Budget sesi habis."
+
+    max_tokens = min(600, int(remaining / 0.0000006))
+    if max_tokens < 40:
+        st.session_state["budget_exceeded"] = True
+        return "⚠️ Budget hampir habis. Refresh untuk sesi baru."
+
+    today_str = datetime.date.today().strftime("%A, %d %B %Y")
+    system = SYSTEM_TODO.format(today=today_str)
+
+    try:
+        client = get_openai_client()
+        resp = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "system", "content": system}] + messages,
+            max_tokens=max_tokens,
+            temperature=0.4,
+        )
+        used = resp.usage.total_tokens if resp.usage else 200
+        st.session_state["total_tokens"] = st.session_state.get("total_tokens", 0) + used
+        return resp.choices[0].message.content
+    except Exception as e:
+        return f"❌ Error AI: {e}"
+
+
+# ── GOOGLE CALENDAR HELPERS ──────────────────────────────────────────────────
+
+def get_calendar_id() -> str:
+    try:
+        return str(st.secrets["google_calendar"]["calendar_id"])
+    except Exception:
+        return get_secret("GOOGLE_CALENDAR_ID", "primary")
+
+
+def get_calendar_timezone() -> str:
+    try:
+        return str(st.secrets["google_calendar"]["timezone"])
+    except Exception:
+        return "Asia/Jakarta"
+
+
+@st.cache_resource(show_spinner=False)
+def get_calendar_service():
+    """Buat Google Calendar service dari credentials yang sama."""
+    try:
+        from google.oauth2.service_account import Credentials
+        from googleapiclient.discovery import build
+
+        sa = st.secrets["gcp_service_account"]
+        info = {
+            "type":                        str(sa.get("type", "service_account")),
+            "project_id":                  str(sa["project_id"]),
+            "private_key_id":              str(sa["private_key_id"]),
+            "private_key":                 str(sa["private_key"]).replace("\\n", "\n"),
+            "client_email":                str(sa["client_email"]),
+            "client_id":                   str(sa["client_id"]),
+            "auth_uri":                    str(sa.get("auth_uri", "https://accounts.google.com/o/oauth2/auth")),
+            "token_uri":                   str(sa.get("token_uri", "https://oauth2.googleapis.com/token")),
+            "auth_provider_x509_cert_url": str(sa.get("auth_provider_x509_cert_url",
+                                               "https://www.googleapis.com/oauth2/v1/certs")),
+            "client_x509_cert_url":        str(sa.get("client_x509_cert_url", "")),
+            "universe_domain":             str(sa.get("universe_domain", "googleapis.com")),
+        }
+        scopes = ["https://www.googleapis.com/auth/calendar"]
+        creds = Credentials.from_service_account_info(info, scopes=scopes)
+        return build("calendar", "v3", credentials=creds), None
+    except KeyError as e:
+        return None, f"Field tidak ditemukan: {e}"
+    except Exception as e:
+        return None, str(e)
+
+
+def add_google_calendar_event(title: str, date_str: str, start_time: str,
+                               end_time: str, description: str = "",
+                               location: str = "") -> tuple[bool, str, str]:
+    """
+    Tambahkan event ke Google Calendar.
+    Return (success, message, event_link).
+    """
+    svc, err = get_calendar_service()
+    if svc is None:
+        return False, f"❌ Gagal konek Calendar: {err}", ""
+
+    tz = get_calendar_timezone()
+    cal_id = get_calendar_id()
+
+    try:
+        start_dt = f"{date_str}T{start_time}:00"
+        end_dt   = f"{date_str}T{end_time}:00"
+        body = {
+            "summary":     title,
+            "description": description,
+            "location":    location,
+            "start":       {"dateTime": start_dt, "timeZone": tz},
+            "end":         {"dateTime": end_dt,   "timeZone": tz},
+            "reminders":   {
+                "useDefault": False,
+                "overrides": [
+                    {"method": "popup", "minutes": 30},
+                    {"method": "email", "minutes": 60},
+                ],
+            },
+        }
+        result = svc.events().insert(calendarId=cal_id, body=body).execute()
+        link = result.get("htmlLink", "")
+        return True, "✅ Event berhasil ditambahkan ke Google Calendar", link
+    except Exception as e:
+        return False, f"❌ Gagal tambah event: {e}", ""
+
+
+def load_upcoming_events(max_results: int = 20) -> list[dict]:
+    """Muat event mendatang dari Google Calendar."""
+    svc, err = get_calendar_service()
+    if svc is None:
+        return []
+    try:
+        now = datetime.datetime.utcnow().isoformat() + "Z"
+        cal_id = get_calendar_id()
+        result = svc.events().list(
+            calendarId=cal_id,
+            timeMin=now,
+            maxResults=max_results,
+            singleEvents=True,
+            orderBy="startTime",
+        ).execute()
+        events = []
+        for item in result.get("items", []):
+            start = item.get("start", {})
+            end   = item.get("end", {})
+            start_str = start.get("dateTime", start.get("date", ""))
+            end_str   = end.get("dateTime",   end.get("date",   ""))
+            events.append({
+                "id":          item.get("id", ""),
+                "title":       item.get("summary", "(tanpa judul)"),
+                "start":       start_str,
+                "end":         end_str,
+                "description": item.get("description", ""),
+                "location":    item.get("location", ""),
+                "link":        item.get("htmlLink", ""),
+            })
+        return events
+    except Exception:
+        return []
+
+
+def delete_calendar_event(event_id: str) -> tuple[bool, str]:
+    """Hapus event dari Google Calendar berdasarkan ID."""
+    svc, err = get_calendar_service()
+    if svc is None:
+        return False, f"❌ {err}"
+    try:
+        cal_id = get_calendar_id()
+        svc.events().delete(calendarId=cal_id, eventId=event_id).execute()
+        return True, "✅ Event dihapus"
+    except Exception as e:
+        return False, f"❌ Gagal hapus: {e}"
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # SECTION 4 — SESSION STATE INIT
 # ══════════════════════════════════════════════════════════════════════════════
@@ -453,6 +644,10 @@ def init_state():
         "sheet_loaded":       False,    # sudah load dari sheet?
         "show_analytics":     False,
         "delete_confirm_idx": None,     # index baris yg mau dihapus
+        # Todo Agent
+        "todo_messages":      [],       # chat history todo
+        "todo_events_cache":  [],       # cache event dari Calendar
+        "todo_cache_loaded":  False,    # sudah load events?
     }
     for k, v in defaults.items():
         if k not in st.session_state:
@@ -483,10 +678,10 @@ st.markdown("""
   <div style='font-family:"Playfair Display",serif;font-size:2.8rem;font-weight:700;
        background:linear-gradient(135deg,#a8d5b5,#7ab892,#c8a84b);
        -webkit-background-clip:text;-webkit-text-fill-color:transparent;'>
-    💰 SAMS Financial Agent
+    🌿 SAMS Agent
   </div>
   <div style='color:#7ab892;font-size:.8rem;letter-spacing:3px;text-transform:uppercase;margin-top:.3rem;'>
-    Google Sheets · Real-time Sync · Persistent Data
+    Google Sheets · Google Calendar · Real-time Sync
   </div>
 </div>
 """, unsafe_allow_html=True)
@@ -544,6 +739,10 @@ GOOGLE_SHEET_ID = "14OjkRWpi982pWYFGv7FPNHPxlipVvloRapZqGDTDq1I"
 [google_sheets]
 sheet_name = "Finance"
 
+[google_calendar]
+calendar_id = "lololzolzol@gmail.com"
+timezone    = "Asia/Jakarta"
+
 [gcp_service_account]
 type = "service_account"
 project_id = "sams-agent-493004"
@@ -566,10 +765,17 @@ client_x509_cert_url = "https://www.googleapis.com/robot/v1/metadata/x509/sams-a
         st.session_state["finance_entries"] = []
         st.rerun()
 
+    if st.button("🔄 Reload Events Calendar", use_container_width=True, type="secondary"):
+        st.session_state["todo_cache_loaded"] = False
+        st.session_state["todo_events_cache"] = []
+        st.rerun()
+
     if st.button("🧹 Reset Cache Koneksi", use_container_width=True, type="secondary"):
         get_gspread_client.clear()
         get_worksheet.clear()
+        get_calendar_service.clear()
         st.session_state["sheet_loaded"] = False
+        st.session_state["todo_cache_loaded"] = False
         st.rerun()
 
 
@@ -577,9 +783,260 @@ client_x509_cert_url = "https://www.googleapis.com/robot/v1/metadata/x509/sams-a
 # TAB LAYOUT
 # ══════════════════════════════════════════════════════════════════════════════
 
-tab_catat, tab_riwayat, tab_chat = st.tabs(
-    ["➕ Catat Transaksi", "📊 Riwayat & Analitik", "💬 Chat AI Keuangan"]
+tab_todo, tab_catat, tab_riwayat, tab_chat = st.tabs(
+    ["🗓️ Todo Task Agent", "➕ Catat Transaksi", "📊 Riwayat & Analitik", "💬 Chat AI Keuangan"]
 )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# TAB 0 — TODO TASK AGENT (Google Calendar)
+# ══════════════════════════════════════════════════════════════════════════════
+with tab_todo:
+
+    # ── Status koneksi Calendar ───────────────────────────────────────────────
+    cal_svc, cal_err = get_calendar_service()
+    cal_ok = cal_svc is not None
+
+    st.markdown(f"""
+    <div class='card'>
+      <div class='card-title'>🗓️ SAMS Todo Task Agent
+        <span style='margin-left:auto;font-size:.72rem;
+              background:{"rgba(74,140,92,.18)" if cal_ok else "rgba(224,85,85,.14)"};
+              color:{"#7ab892" if cal_ok else "#e08888"};
+              border:1px solid {"rgba(74,140,92,.35)" if cal_ok else "rgba(224,85,85,.35)"};
+              padding:3px 11px;border-radius:20px;'>
+          {"● Google Calendar Terhubung" if cal_ok else "● Calendar Tidak Terhubung"}
+        </span>
+      </div>
+      <p style='color:#7ab892;font-size:.82rem;margin:0'>
+        Ceritakan kegiatan Anda — SAMS akan mendeteksi judul, tanggal, dan jam secara otomatis lalu menyimpannya ke Google Calendar.
+      </p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    if not cal_ok:
+        st.warning(f"⚠️ Google Calendar belum terhubung: {cal_err}. Aktifkan **Google Calendar API** dan share kalender ke service account. Tambahkan `[google_calendar]` di Secrets.")
+
+    # ── Load upcoming events (cache per session) ──────────────────────────────
+    if not st.session_state["todo_cache_loaded"]:
+        with st.spinner("📅 Memuat agenda dari Google Calendar…"):
+            st.session_state["todo_events_cache"] = load_upcoming_events(20)
+        st.session_state["todo_cache_loaded"] = True
+
+    # ── UPCOMING EVENTS DISPLAY ───────────────────────────────────────────────
+    events_cache = st.session_state["todo_events_cache"]
+    if events_cache:
+        st.markdown("<div class='card-title' style='font-size:.9rem;margin-bottom:.5rem'>📋 Agenda Mendatang</div>",
+                    unsafe_allow_html=True)
+
+        # Group by date
+        from collections import defaultdict
+        grouped = defaultdict(list)
+        for ev in events_cache:
+            try:
+                dt = datetime.datetime.fromisoformat(ev["start"].replace("Z",""))
+                day_key = dt.strftime("%A, %d %B %Y")
+            except Exception:
+                day_key = ev["start"][:10] if ev["start"] else "Tanggal tidak diketahui"
+            grouped[day_key].append(ev)
+
+        today_label = datetime.date.today().strftime("%A, %d %B %Y")
+        tmr_label   = (datetime.date.today() + datetime.timedelta(days=1)).strftime("%A, %d %B %Y")
+
+        for day_key, day_evs in list(grouped.items())[:7]:
+            badge = ""
+            if day_key == today_label:
+                badge = "<span style='background:rgba(200,168,75,.2);color:#c8a84b;border:1px solid rgba(200,168,75,.4);border-radius:8px;padding:1px 8px;font-size:.68rem;margin-left:8px;'>Hari Ini</span>"
+            elif day_key == tmr_label:
+                badge = "<span style='background:rgba(74,140,92,.18);color:#7ab892;border:1px solid rgba(74,140,92,.35);border-radius:8px;padding:1px 8px;font-size:.68rem;margin-left:8px;'>Besok</span>"
+
+            st.markdown(f"<div style='color:#a8d5b5;font-size:.8rem;font-weight:700;margin:.6rem 0 .3rem;letter-spacing:.5px;'>{day_key}{badge}</div>",
+                        unsafe_allow_html=True)
+            for ev in day_evs:
+                try:
+                    start_dt = datetime.datetime.fromisoformat(ev["start"].replace("Z",""))
+                    end_dt   = datetime.datetime.fromisoformat(ev["end"].replace("Z",""))
+                    time_str = f"{start_dt.strftime('%H:%M')} – {end_dt.strftime('%H:%M')}"
+                except Exception:
+                    time_str = ""
+
+                loc_html = f"<span style='color:#7ab892;font-size:.7rem;'>📍 {ev['location']}</span>" if ev.get("location") else ""
+                link_html = f"<a href='{ev['link']}' target='_blank' style='color:#7ab892;font-size:.7rem;text-decoration:none;'>🔗 Buka</a>" if ev.get("link") else ""
+
+                st.markdown(f"""
+                <div style='background:rgba(26,58,42,.4);border:1px solid rgba(74,140,92,.2);
+                            border-left:3px solid #4a8c5c;border-radius:0 10px 10px 0;
+                            padding:.55rem 1rem;margin-bottom:.3rem;'>
+                  <div style='display:flex;align-items:center;gap:.5rem;'>
+                    <span style='color:#a8d5b5;font-weight:700;font-size:.86rem;flex:1;'>{ev["title"]}</span>
+                    <span style='color:#c8a84b;font-size:.75rem;font-weight:600;'>⏰ {time_str}</span>
+                  </div>
+                  <div style='display:flex;gap:.8rem;margin-top:3px;'>{loc_html}{link_html}</div>
+                  {f"<div style='color:rgba(168,213,181,.6);font-size:.72rem;margin-top:3px;'>{ev['description'][:80]}{'…' if len(ev.get('description',''))>80 else ''}</div>" if ev.get("description") else ""}
+                </div>
+                """, unsafe_allow_html=True)
+    else:
+        if cal_ok:
+            st.markdown("<div style='color:#7ab892;font-size:.84rem;padding:.5rem 0;'>📭 Belum ada agenda mendatang di kalender.</div>",
+                        unsafe_allow_html=True)
+
+    st.markdown("<hr class='divider'>", unsafe_allow_html=True)
+
+    # ── CHAT AI TODO ──────────────────────────────────────────────────────────
+    st.markdown("<div class='card-title' style='font-size:.9rem'>💬 Ceritakan Kegiatan Anda</div>",
+                unsafe_allow_html=True)
+
+    # Display chat history
+    for msg in st.session_state["todo_messages"][-10:]:
+        role = msg["role"]
+        css  = "msg-user" if role=="user" else "msg-ai"
+        label = "Anda" if role=="user" else "🌿 SAMS"
+        lbl_css = "color:#7ab892" if role=="user" else "color:#c8a84b"
+        content_disp = msg["content"]
+        if role == "assistant" and "{" in content_disp:
+            content_disp = re.sub(r'\{[^}]*?\}', '', content_disp, flags=re.DOTALL).strip()
+        st.markdown(f"""
+        <div class='{css}'>
+          <div class='msg-lbl' style='{lbl_css}'>{label}</div>
+          {content_disp}
+        </div>
+        """, unsafe_allow_html=True)
+
+    ti1, ti2 = st.columns([5, 1])
+    with ti1:
+        todo_input = st.text_input(
+            "todo_msg",
+            placeholder='Contoh: "Besok rapat tim jam 09:00 sampai 11:00 di kantor Jakarta"',
+            key="todo_chat_input",
+            label_visibility="collapsed",
+        )
+    with ti2:
+        send_todo = st.button("Kirim →", type="primary", use_container_width=True, key="btn_send_todo")
+
+    # Quick prompts todo
+    tqp_cols = st.columns(3)
+    todo_quick = [
+        "📋 Tampilkan agenda minggu ini",
+        "🏃 Meeting besok jam 10 pagi 1 jam",
+        "📚 Belajar online Sabtu jam 14:00–16:00",
+    ]
+    todo_quick_clicked = None
+    for i, qp in enumerate(todo_quick):
+        with tqp_cols[i]:
+            if st.button(qp, key=f"tqp_{i}", use_container_width=True):
+                todo_quick_clicked = qp
+
+    final_todo_input = todo_quick_clicked or (todo_input.strip() if send_todo and todo_input.strip() else None)
+
+    if final_todo_input:
+        st.session_state["todo_messages"].append({"role": "user", "content": final_todo_input})
+
+        with st.spinner("🌿 SAMS memproses kegiatan…"):
+            reply = call_ai_todo(st.session_state["todo_messages"][-8:])
+
+        st.session_state["todo_messages"].append({"role": "assistant", "content": reply})
+
+        # ── Deteksi JSON event dari reply ─────────────────────────────────────
+        if '"action":"add_event"' in reply or '"action": "add_event"' in reply:
+            m = re.search(r'\{[^{}]*"action"\s*:\s*"add_event"[^{}]*\}', reply, re.DOTALL)
+            if m:
+                try:
+                    data = json.loads(m.group())
+                    ok, cal_msg, link = add_google_calendar_event(
+                        title=data.get("title", "Kegiatan"),
+                        date_str=data.get("date", str(datetime.date.today())),
+                        start_time=data.get("start_time", "09:00"),
+                        end_time=data.get("end_time", "10:00"),
+                        description=data.get("description", ""),
+                        location=data.get("location", ""),
+                    )
+                    if ok:
+                        # Refresh cache events
+                        st.session_state["todo_cache_loaded"] = False
+                        st.success(f"{cal_msg} 🎉" + (f" [Buka di Calendar]({link})" if link else ""))
+                    else:
+                        st.warning(cal_msg)
+                except Exception as parse_err:
+                    st.warning(f"Gagal parse JSON event: {parse_err}")
+
+        st.rerun()
+
+    if st.session_state["todo_messages"]:
+        if st.button("🗑️ Hapus Riwayat Chat Todo", type="secondary", key="clear_todo_chat"):
+            st.session_state["todo_messages"] = []
+            st.rerun()
+
+    st.markdown("<hr class='divider'>", unsafe_allow_html=True)
+
+    # ── FORM MANUAL ───────────────────────────────────────────────────────────
+    st.markdown("<div class='card-title' style='font-size:.9rem'>📝 Tambah Agenda Manual</div>",
+                unsafe_allow_html=True)
+    st.markdown("<p style='color:#7ab892;font-size:.8rem;margin-bottom:.7rem'>Isi form berikut untuk menambahkan agenda langsung tanpa AI.</p>",
+                unsafe_allow_html=True)
+
+    with st.form("form_todo_manual", clear_on_submit=True):
+        fm1, fm2 = st.columns([3, 1])
+        with fm1:
+            fm_title = st.text_input("Judul Kegiatan *", placeholder="Contoh: Rapat Tim Marketing")
+        with fm2:
+            fm_date = st.date_input("Tanggal *", value=datetime.date.today())
+
+        fm3, fm4 = st.columns(2)
+        with fm3:
+            fm_start = st.time_input("Jam Mulai *", value=datetime.time(9, 0))
+        with fm4:
+            fm_end   = st.time_input("Jam Selesai *", value=datetime.time(10, 0))
+
+        fm5, fm6 = st.columns(2)
+        with fm5:
+            fm_location = st.text_input("Lokasi (opsional)", placeholder="Contoh: Kantor Jakarta, Zoom, dll.")
+        with fm6:
+            fm_desc = st.text_input("Deskripsi (opsional)", placeholder="Catatan tambahan…")
+
+        fm_submitted = st.form_submit_button("📅 Simpan ke Google Calendar", type="primary", use_container_width=True)
+
+    if fm_submitted:
+        if not fm_title.strip():
+            st.error("⚠️ Judul kegiatan tidak boleh kosong!")
+        elif fm_start >= fm_end:
+            st.error("⚠️ Jam selesai harus lebih dari jam mulai!")
+        else:
+            with st.spinner("📅 Menyimpan ke Google Calendar…"):
+                ok, cal_msg, link = add_google_calendar_event(
+                    title=fm_title.strip(),
+                    date_str=str(fm_date),
+                    start_time=fm_start.strftime("%H:%M"),
+                    end_time=fm_end.strftime("%H:%M"),
+                    description=fm_desc.strip(),
+                    location=fm_location.strip(),
+                )
+            if ok:
+                st.session_state["todo_cache_loaded"] = False
+                st.success(f"{cal_msg} 🎉" + (f" [Buka di Calendar]({link})" if link else ""))
+                st.rerun()
+            else:
+                st.error(cal_msg)
+
+    # ── HAPUS EVENT ───────────────────────────────────────────────────────────
+    if events_cache:
+        st.markdown("<hr class='divider'>", unsafe_allow_html=True)
+        with st.expander("🗑️ Hapus Event dari Calendar", expanded=False):
+            st.markdown("<p style='color:#e08888;font-size:.82rem;'>⚠️ Hapus event dari Google Calendar secara permanen.</p>",
+                        unsafe_allow_html=True)
+            ev_options = {f"{ev['title']} — {ev['start'][:16].replace('T',' ')}": ev["id"]
+                          for ev in events_cache if ev.get("id")}
+            if ev_options:
+                sel_ev = st.selectbox("Pilih event:", list(ev_options.keys()), key="del_ev_select")
+                if st.button("🗑️ Hapus Event Ini", type="secondary", key="del_ev_btn"):
+                    ev_id = ev_options[sel_ev]
+                    ok, msg = delete_calendar_event(ev_id)
+                    if ok:
+                        st.session_state["todo_cache_loaded"] = False
+                        st.success(msg)
+                        st.rerun()
+                    else:
+                        st.error(msg)
+
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -956,10 +1413,10 @@ st.markdown("""
   <div style='font-family:"Playfair Display",serif;
               background:linear-gradient(135deg,#a8d5b5,#7ab892);
               -webkit-background-clip:text;-webkit-text-fill-color:transparent;'>
-    🌿 SAMS Financial Agent
+    🌿 SAMS Agent
   </div>
   <div style='color:rgba(122,184,146,.45);font-size:.7rem;letter-spacing:1.5px;text-transform:uppercase;margin-top:.2rem'>
-    Data Persisten · Google Sheets Sync · Built with Sustainable Spirit
+    Financial Agent · Todo Task Agent · Built with Sustainable Spirit
   </div>
 </div>
 """, unsafe_allow_html=True)
