@@ -407,7 +407,7 @@ html, body, [data-testid="stApp"] {
 # ─── HELPERS ────────────────────────────────────────────────────────────────
 def get_openai_client():
     from openai import OpenAI
-    return OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    return OpenAI(api_key=get_env("OPENAI_API_KEY"))
 
 def count_tokens_approx(text: str) -> int:
     """~4 chars per token heuristic."""
@@ -446,22 +446,150 @@ def init_session_state():
 init_session_state()
 
 # ─── GOOGLE SERVICES ─────────────────────────────────────────────────────────
+def get_env(key, default=None):
+    """Baca dari st.secrets (Streamlit Cloud) atau os.environ (lokal)."""
+    try:
+        return st.secrets[key]
+    except:
+        return os.getenv(key, default)
+
 def get_google_creds():
-    """Return Google credentials if credentials.json exists."""
-    creds_path = os.getenv("GOOGLE_CREDENTIALS_PATH", "credentials.json")
-    if not os.path.exists(creds_path):
-        return None
+    """
+    Return Google credentials.
+    Prioritas:
+    1. st.secrets['google_token'] — token OAuth tersimpan di Streamlit Secrets
+    2. st.secrets['google_credentials'] — client_id/secret untuk flow baru
+    3. File lokal credentials.json (development)
+    """
+    SCOPES = [
+        "https://www.googleapis.com/auth/calendar",
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/drive",
+    ]
     try:
         from google.oauth2.credentials import Credentials
-        from google_auth_oauthlib.flow import InstalledAppFlow
         from google.auth.transport.requests import Request
 
-        SCOPES = [
-            "https://www.googleapis.com/auth/calendar",
-            "https://www.googleapis.com/auth/spreadsheets",
-            "https://www.googleapis.com/auth/drive",
-            "https://www.googleapis.com/auth/keep",
-        ]
+        # ── OPSI 1: Token lengkap sudah ada di st.secrets ──────────────────
+        # Ini dipakai setelah user sudah login sekali dan token disimpan manual
+        try:
+            token_info = dict(st.secrets["google_token"])
+            creds = Credentials(
+                token=token_info.get("token"),
+                refresh_token=token_info.get("refresh_token"),
+                token_uri=token_info.get("token_uri", "https://oauth2.googleapis.com/token"),
+                client_id=token_info.get("client_id"),
+                client_secret=token_info.get("client_secret"),
+                scopes=SCOPES,
+            )
+            if creds.expired and creds.refresh_token:
+                creds.refresh(Request())
+            return creds
+        except (KeyError, Exception):
+            pass
+
+        # ── OPSI 2: Buat flow dari credentials di st.secrets ───────────────
+        try:
+            gc = dict(st.secrets["google_credentials"])
+            client_id     = gc.get("client_id")
+            client_secret = gc.get("client_secret")
+            redirect_uri  = gc.get("redirect_uri", "https://sams-agent-10.streamlit.app/oauth2callback")
+
+            if client_id and client_secret:
+                # Tampilkan tombol OAuth di UI
+                if "google_auth_code" not in st.session_state:
+                    st.session_state.google_auth_code = None
+
+                if not st.session_state.google_auth_code:
+                    from google_auth_oauthlib.flow import Flow
+                    flow = Flow.from_client_config(
+                        {
+                            "web": {
+                                "client_id": client_id,
+                                "client_secret": client_secret,
+                                "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                                "token_uri": "https://oauth2.googleapis.com/token",
+                                "redirect_uris": [redirect_uri],
+                            }
+                        },
+                        scopes=SCOPES,
+                        redirect_uri=redirect_uri,
+                    )
+                    auth_url, _ = flow.authorization_url(
+                        access_type="offline",
+                        include_granted_scopes="true",
+                        prompt="consent",
+                    )
+                    st.session_state._oauth_flow = flow
+                    st.warning("⚠️ Koneksi Google diperlukan. Klik tombol di bawah untuk login.")
+                    st.markdown(f"""
+                    <a href="{auth_url}" target="_blank">
+                        <button style="background:linear-gradient(135deg,#2d5a3d,#4a8c5c);
+                                       color:white;border:none;padding:10px 24px;border-radius:10px;
+                                       font-weight:700;cursor:pointer;font-size:0.9rem;">
+                            🔐 Login dengan Google
+                        </button>
+                    </a>
+                    """, unsafe_allow_html=True)
+
+                    auth_code_input = st.text_input(
+                        "Setelah login, paste kode dari URL (nilai parameter `code=...`) di sini:",
+                        key="oauth_code_input",
+                        placeholder="4/0AX4XfWh..."
+                    )
+                    if st.button("✅ Konfirmasi Login Google", key="confirm_oauth"):
+                        if auth_code_input.strip():
+                            st.session_state.google_auth_code = auth_code_input.strip()
+                            st.rerun()
+                    return None
+
+                else:
+                    # Tukar code dengan token
+                    try:
+                        flow = st.session_state.get("_oauth_flow")
+                        if flow is None:
+                            from google_auth_oauthlib.flow import Flow
+                            flow = Flow.from_client_config(
+                                {
+                                    "web": {
+                                        "client_id": client_id,
+                                        "client_secret": client_secret,
+                                        "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                                        "token_uri": "https://oauth2.googleapis.com/token",
+                                        "redirect_uris": [redirect_uri],
+                                    }
+                                },
+                                scopes=SCOPES,
+                                redirect_uri=redirect_uri,
+                            )
+                        import os as _os
+                        _os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1"
+                        flow.fetch_token(code=st.session_state.google_auth_code)
+                        creds = flow.credentials
+                        # Tampilkan token untuk disimpan di Streamlit Secrets
+                        token_dict = {
+                            "token": creds.token,
+                            "refresh_token": creds.refresh_token,
+                            "token_uri": creds.token_uri,
+                            "client_id": creds.client_id,
+                            "client_secret": creds.client_secret,
+                        }
+                        st.success("✅ Login Google berhasil!")
+                        st.info("📋 Simpan token ini di Streamlit Secrets → key: `google_token`")
+                        st.code(json.dumps(token_dict, indent=2), language="json")
+                        return creds
+                    except Exception as e:
+                        st.error(f"❌ Gagal tukar token: {e}")
+                        st.session_state.google_auth_code = None
+                        return None
+        except (KeyError, Exception):
+            pass
+
+        # ── OPSI 3: File lokal credentials.json (development) ──────────────
+        from google_auth_oauthlib.flow import InstalledAppFlow
+        creds_path = os.getenv("GOOGLE_CREDENTIALS_PATH", "credentials.json")
+        if not os.path.exists(creds_path):
+            return None
         creds = None
         if os.path.exists("token.json"):
             creds = Credentials.from_authorized_user_file("token.json", SCOPES)
@@ -474,6 +602,7 @@ def get_google_creds():
             with open("token.json", "w") as f:
                 f.write(creds.to_json())
         return creds
+
     except Exception as e:
         return None
 
@@ -501,7 +630,7 @@ def add_google_calendar_event(title, description, start_dt, end_dt):
 
 def append_to_google_sheet(entries):
     """Append finance entries to Google Sheet."""
-    sheet_id = os.getenv("GOOGLE_SHEET_ID")
+    sheet_id = get_env("GOOGLE_SHEET_ID")
     creds = get_google_creds()
     if not creds or not sheet_id:
         return False, "Google Sheet ID atau credentials tidak dikonfigurasi."
@@ -520,7 +649,7 @@ def append_to_google_sheet(entries):
 
 def upload_audio_to_drive(audio_bytes, filename):
     """Upload audio to Google Drive and return file_id."""
-    folder_id = os.getenv("GOOGLE_DRIVE_FOLDER_ID")
+    folder_id = get_env("GOOGLE_DRIVE_FOLDER_ID")
     creds = get_google_creds()
     if not creds:
         return None, "Google credentials tidak dikonfigurasi."
