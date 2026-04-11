@@ -419,7 +419,7 @@ def build_oauth_flow():
         gc = st.secrets["google_credentials"]
         client_id     = str(gc["client_id"])
         client_secret = str(gc["client_secret"])
-        redirect_uri  = str(gc.get("redirect_uri", "https://sams-agent-10.streamlit.app/oauth2callback"))
+        redirect_uri  = str(gc.get("redirect_uri", "https://sams-agent-10.streamlit.app/"))
         from google_auth_oauthlib.flow import Flow
         flow = Flow.from_client_config(
             {
