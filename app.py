@@ -3,7 +3,6 @@ import os
 import json
 import time
 import datetime
-import threading
 import tempfile
 import io
 import base64
@@ -49,7 +48,6 @@ html, body, [data-testid="stApp"] {
     color: var(--cream) !important;
 }
 
-/* Animated background pattern */
 [data-testid="stApp"]::before {
     content: '';
     position: fixed;
@@ -62,7 +60,6 @@ html, body, [data-testid="stApp"] {
     z-index: 0;
 }
 
-/* Leaf pattern overlay */
 [data-testid="stApp"]::after {
     content: '';
     position: fixed;
@@ -73,7 +70,6 @@ html, body, [data-testid="stApp"] {
     z-index: 0;
 }
 
-/* Main container */
 .main .block-container {
     position: relative;
     z-index: 1;
@@ -81,7 +77,6 @@ html, body, [data-testid="stApp"] {
     max-width: 1200px !important;
 }
 
-/* HEADER */
 .sams-header {
     text-align: center;
     padding: 2rem 0 1.5rem;
@@ -117,7 +112,6 @@ html, body, [data-testid="stApp"] {
     50% { transform: rotate(5deg); }
 }
 
-/* TABS */
 [data-testid="stTabs"] > div:first-child {
     background: rgba(26,58,42,0.6) !important;
     border-radius: var(--radius) !important;
@@ -152,7 +146,6 @@ html, body, [data-testid="stApp"] {
     color: var(--white) !important;
 }
 
-/* CARDS */
 .sams-card {
     background: rgba(26,58,42,0.5);
     border: 1px solid rgba(74,140,92,0.25);
@@ -176,7 +169,6 @@ html, body, [data-testid="stApp"] {
     gap: 0.5rem;
 }
 
-/* ── TEXT INPUTS – high contrast for dark & light modes ── */
 [data-testid="stTextInput"] > div > div,
 [data-testid="stTextArea"] > div > div,
 [data-testid="stNumberInput"] > div > div {
@@ -197,7 +189,7 @@ html, body, [data-testid="stApp"] {
 [data-testid="stTextArea"] textarea,
 [data-testid="stNumberInput"] input {
     background: transparent !important;
-    color: #e8f5ec !important;        /* always bright on dark bg */
+    color: #e8f5ec !important;
     caret-color: var(--sage) !important;
     font-family: 'Plus Jakarta Sans', sans-serif !important;
     font-size: 0.92rem !important;
@@ -207,7 +199,6 @@ html, body, [data-testid="stApp"] {
 [data-testid="stTextArea"] textarea::placeholder {
     color: rgba(168,213,181,0.5) !important;
 }
-/* Label above inputs */
 [data-testid="stTextInput"] label,
 [data-testid="stTextArea"] label,
 [data-testid="stNumberInput"] label,
@@ -219,7 +210,6 @@ html, body, [data-testid="stApp"] {
     letter-spacing: 0.5px !important;
 }
 
-/* DATE & TIME inputs */
 [data-testid="stDateInput"] > div > div,
 [data-testid="stTimeInput"] > div > div {
     background: rgba(10,30,18,0.85) !important;
@@ -232,7 +222,6 @@ html, body, [data-testid="stApp"] {
     font-family: 'Plus Jakarta Sans', sans-serif !important;
 }
 
-/* SELECT BOX */
 [data-testid="stSelectbox"] > div > div {
     background: rgba(10,30,18,0.85) !important;
     border: 1.5px solid rgba(122,184,146,0.45) !important;
@@ -241,7 +230,6 @@ html, body, [data-testid="stApp"] {
 }
 [data-testid="stSelectbox"] label { color: var(--sage) !important; font-weight: 600 !important; }
 
-/* BUTTONS */
 [data-testid="stButton"] button {
     font-family: 'Plus Jakarta Sans', sans-serif !important;
     font-weight: 700 !important;
@@ -273,7 +261,6 @@ html, body, [data-testid="stApp"] {
     color: var(--mint) !important;
 }
 
-/* METRIC */
 [data-testid="metric-container"] {
     background: rgba(26,58,42,0.5) !important;
     border: 1px solid rgba(74,140,92,0.25) !important;
@@ -284,23 +271,19 @@ html, body, [data-testid="stApp"] {
 [data-testid="metric-container"] label { color: var(--sage) !important; font-weight: 600 !important; }
 [data-testid="metric-container"] [data-testid="stMetricValue"] { color: var(--mint) !important; font-weight: 700 !important; }
 
-/* DATAFRAME */
 [data-testid="stDataFrame"] {
     border-radius: var(--radius) !important;
     overflow: hidden !important;
     border: 1px solid rgba(74,140,92,0.25) !important;
 }
 
-/* SUCCESS / INFO / WARNING / ERROR */
 [data-testid="stAlert"] {
     border-radius: var(--radius-sm) !important;
     backdrop-filter: blur(10px) !important;
 }
 
-/* SPINNER */
 [data-testid="stSpinner"] > div { border-top-color: var(--sage) !important; }
 
-/* STATUS BADGE */
 .status-badge {
     display: inline-flex;
     align-items: center;
@@ -322,7 +305,6 @@ html, body, [data-testid="stApp"] {
     border: 1px solid rgba(200,168,75,0.4);
 }
 
-/* TOKEN COUNTER */
 .token-bar {
     background: rgba(26,58,42,0.8);
     border: 1px solid rgba(74,140,92,0.3);
@@ -348,14 +330,12 @@ html, body, [data-testid="stApp"] {
     overflow: hidden;
 }
 
-/* DIVIDER */
 .sams-divider {
     border: none;
     border-top: 1px solid rgba(74,140,92,0.2);
     margin: 1rem 0;
 }
 
-/* CHAT MESSAGES */
 .chat-msg-user {
     background: rgba(45,90,61,0.4);
     border: 1px solid rgba(74,140,92,0.3);
@@ -384,7 +364,6 @@ html, body, [data-testid="stApp"] {
 .msg-label-user { color: var(--sage); }
 .msg-label-ai   { color: var(--gold); }
 
-/* RECORDING ANIMATION */
 @keyframes pulse-rec {
     0%,100% { box-shadow: 0 0 0 0 rgba(220,50,50,0.4); }
     50%      { box-shadow: 0 0 0 12px rgba(220,50,50,0); }
@@ -398,7 +377,6 @@ html, body, [data-testid="stApp"] {
     margin-right: 6px;
 }
 
-/* HIDE default streamlit elements */
 #MainMenu, footer, header { visibility: hidden !important; }
 [data-testid="stDecoration"] { display: none !important; }
 </style>
@@ -410,40 +388,12 @@ def get_openai_client():
     return OpenAI(api_key=get_env("OPENAI_API_KEY"))
 
 def count_tokens_approx(text: str) -> int:
-    """~4 chars per token heuristic."""
     return max(1, len(text) // 4)
 
 def tokens_to_usd(tokens: int) -> float:
-    # gpt-4o-mini: $0.15/1M input + $0.60/1M output → average ~$0.00000038 per token
     return tokens * 0.00000050
 
 MAX_BUDGET_USD = 0.05
-
-def init_session_state():
-    defaults = {
-        # Token tracking
-        "total_tokens_used": 0,
-        "budget_exceeded": False,
-        # Todo
-        "todo_messages": [],
-        "todo_events": [],
-        # Finance
-        "finance_messages": [],
-        "finance_entries": [],          # [{date, description, type, amount}]
-        "show_analytics": False,
-        # Notes
-        "note_messages": [],
-        "note_transcriptions": [],
-        "recording": False,
-        "audio_bytes": None,
-        "mic_permission": None,
-        "note_title": "",
-    }
-    for k, v in defaults.items():
-        if k not in st.session_state:
-            st.session_state[k] = v
-
-init_session_state()
 
 # ─── GOOGLE SERVICES ─────────────────────────────────────────────────────────
 GOOGLE_SCOPES = [
@@ -452,8 +402,12 @@ GOOGLE_SCOPES = [
     "https://www.googleapis.com/auth/drive",
 ]
 
+# Sheet tab names
+SHEET_FINANCE  = "Finance"
+SHEET_EVENTS   = "Events"
+SHEET_NOTES    = "Notes"
+
 def get_env(key, default=None):
-    """Baca dari st.secrets (Streamlit Cloud) atau os.environ (lokal)."""
     try:
         val = st.secrets[key]
         return str(val) if val is not None else default
@@ -461,7 +415,6 @@ def get_env(key, default=None):
         return os.getenv(key, default)
 
 def build_oauth_flow():
-    """Buat Google OAuth Flow dari st.secrets."""
     try:
         gc = st.secrets["google_credentials"]
         client_id     = str(gc["client_id"])
@@ -486,17 +439,9 @@ def build_oauth_flow():
         return None, None
 
 def get_google_creds():
-    """
-    Kembalikan credentials Google yang valid.
-    Urutan prioritas:
-      1. st.secrets[google_token]  → sudah punya refresh_token tersimpan
-      2. st.session_state[_google_creds]  → sudah login di sesi ini
-      3. Return None  → perlu login, ditangani di halaman utama
-    """
     from google.oauth2.credentials import Credentials
     from google.auth.transport.requests import Request
 
-    # ── 1. Token tersimpan di Secrets ──────────────────────────────────────
     try:
         tk = st.secrets["google_token"]
         creds = Credentials(
@@ -515,7 +460,6 @@ def get_google_creds():
     except (KeyError, Exception):
         pass
 
-    # ── 2. Sudah login di sesi ini ─────────────────────────────────────────
     if st.session_state.get("_google_creds"):
         creds = st.session_state["_google_creds"]
         try:
@@ -525,22 +469,227 @@ def get_google_creds():
             pass
         return creds
 
-    # ── 3. Belum login ─────────────────────────────────────────────────────
     return None
 
+# ─── SHEETS HELPER ───────────────────────────────────────────────────────────
+def get_sheets_service():
+    creds = get_google_creds()
+    if not creds or creds == "SKIP":
+        return None
+    try:
+        from googleapiclient.discovery import build
+        return build("sheets", "v4", credentials=creds)
+    except:
+        return None
 
+def ensure_sheet_tabs(service, sheet_id):
+    """Make sure Finance, Events, Notes tabs exist with headers."""
+    try:
+        meta = service.spreadsheets().get(spreadsheetId=sheet_id).execute()
+        existing = [s["properties"]["title"] for s in meta.get("sheets", [])]
+
+        tabs_needed = {
+            SHEET_FINANCE: ["Tanggal", "Keterangan", "Jenis", "Jumlah"],
+            SHEET_EVENTS:  ["Judul", "Tanggal", "Jam Mulai", "Jam Selesai", "Deskripsi", "Synced"],
+            SHEET_NOTES:   ["Judul", "Timestamp", "Transkripsi", "Catatan"],
+        }
+
+        requests_body = []
+        for tab in tabs_needed:
+            if tab not in existing:
+                requests_body.append({
+                    "addSheet": {"properties": {"title": tab}}
+                })
+
+        if requests_body:
+            service.spreadsheets().batchUpdate(
+                spreadsheetId=sheet_id,
+                body={"requests": requests_body}
+            ).execute()
+
+        # Write headers for newly created tabs
+        for tab, headers in tabs_needed.items():
+            if tab not in existing:
+                service.spreadsheets().values().update(
+                    spreadsheetId=sheet_id,
+                    range=f"{tab}!A1",
+                    valueInputOption="USER_ENTERED",
+                    body={"values": [headers]}
+                ).execute()
+    except Exception as e:
+        pass  # Non-fatal
+
+def load_finance_from_sheet():
+    """Load all finance entries from Google Sheets."""
+    sheet_id = get_env("GOOGLE_SHEET_ID")
+    service = get_sheets_service()
+    if not service or not sheet_id:
+        return []
+    try:
+        result = service.spreadsheets().values().get(
+            spreadsheetId=sheet_id,
+            range=f"{SHEET_FINANCE}!A2:D"
+        ).execute()
+        rows = result.get("values", [])
+        entries = []
+        for row in rows:
+            if len(row) >= 4:
+                try:
+                    entries.append({
+                        "date": row[0],
+                        "description": row[1],
+                        "type": row[2],
+                        "amount": float(str(row[3]).replace(",","").replace("Rp","").strip()),
+                    })
+                except:
+                    pass
+        return entries
+    except:
+        return []
+
+def load_events_from_sheet():
+    """Load all calendar events from Google Sheets."""
+    sheet_id = get_env("GOOGLE_SHEET_ID")
+    service = get_sheets_service()
+    if not service or not sheet_id:
+        return []
+    try:
+        result = service.spreadsheets().values().get(
+            spreadsheetId=sheet_id,
+            range=f"{SHEET_EVENTS}!A2:F"
+        ).execute()
+        rows = result.get("values", [])
+        events = []
+        for row in rows:
+            if len(row) >= 5:
+                events.append({
+                    "title": row[0],
+                    "date": row[1],
+                    "start_time": row[2],
+                    "end_time": row[3],
+                    "description": row[4] if len(row) > 4 else "",
+                    "synced": row[5].lower() == "true" if len(row) > 5 else False,
+                })
+        return events
+    except:
+        return []
+
+def load_notes_from_sheet():
+    """Load all notes from Google Sheets."""
+    sheet_id = get_env("GOOGLE_SHEET_ID")
+    service = get_sheets_service()
+    if not service or not sheet_id:
+        return []
+    try:
+        result = service.spreadsheets().values().get(
+            spreadsheetId=sheet_id,
+            range=f"{SHEET_NOTES}!A2:D"
+        ).execute()
+        rows = result.get("values", [])
+        notes = []
+        for row in rows:
+            if len(row) >= 4:
+                notes.append({
+                    "title": row[0],
+                    "timestamp": row[1],
+                    "transcript": row[2],
+                    "notes": row[3],
+                    "drive_file_id": None,
+                })
+        return notes
+    except:
+        return []
+
+def append_finance_to_sheet(entry):
+    """Append a single finance entry to Sheets."""
+    sheet_id = get_env("GOOGLE_SHEET_ID")
+    service = get_sheets_service()
+    if not service or not sheet_id:
+        return False, "Google Sheets belum terhubung."
+    try:
+        ensure_sheet_tabs(service, sheet_id)
+        service.spreadsheets().values().append(
+            spreadsheetId=sheet_id,
+            range=f"{SHEET_FINANCE}!A:D",
+            valueInputOption="USER_ENTERED",
+            body={"values": [[entry["date"], entry["description"], entry["type"], entry["amount"]]]}
+        ).execute()
+        return True, "Data tersimpan ke Google Sheets ✓"
+    except Exception as e:
+        return False, f"Gagal menyimpan ke Google Sheets: {str(e)}"
+
+def append_event_to_sheet(ev):
+    """Append a calendar event row to Sheets."""
+    sheet_id = get_env("GOOGLE_SHEET_ID")
+    service = get_sheets_service()
+    if not service or not sheet_id:
+        return
+    try:
+        ensure_sheet_tabs(service, sheet_id)
+        service.spreadsheets().values().append(
+            spreadsheetId=sheet_id,
+            range=f"{SHEET_EVENTS}!A:F",
+            valueInputOption="USER_ENTERED",
+            body={"values": [[
+                ev["title"], ev["date"], ev["start_time"],
+                ev["end_time"], ev.get("description",""), str(ev.get("synced", False))
+            ]]}
+        ).execute()
+    except:
+        pass
+
+def append_note_to_sheet(entry):
+    """Append a note entry to Sheets."""
+    sheet_id = get_env("GOOGLE_SHEET_ID")
+    service = get_sheets_service()
+    if not service or not sheet_id:
+        return
+    try:
+        ensure_sheet_tabs(service, sheet_id)
+        service.spreadsheets().values().append(
+            spreadsheetId=sheet_id,
+            range=f"{SHEET_NOTES}!A:D",
+            valueInputOption="USER_ENTERED",
+            body={"values": [[
+                entry["title"], entry["timestamp"],
+                entry["transcript"], entry["notes"]
+            ]]}
+        ).execute()
+    except:
+        pass
+
+# ─── INIT SESSION STATE ──────────────────────────────────────────────────────
+def init_session_state():
+    defaults = {
+        "total_tokens_used": 0,
+        "budget_exceeded": False,
+        "todo_messages": [],
+        "todo_events": [],
+        "finance_messages": [],
+        "finance_entries": [],
+        "show_analytics": False,
+        "note_messages": [],
+        "note_transcriptions": [],
+        "recording": False,
+        "audio_bytes": None,
+        "mic_permission": None,
+        "note_title": "",
+        # Flags to track whether we've loaded from Sheets this session
+        "_data_loaded": False,
+        "_google_creds": None,
+    }
+    for k, v in defaults.items():
+        if k not in st.session_state:
+            st.session_state[k] = v
+
+init_session_state()
+
+# ─── GOOGLE AUTH ─────────────────────────────────────────────────────────────
 def handle_google_oauth():
-    """
-    Ditampilkan di halaman utama SEBELUM tab jika Google belum terkoneksi.
-    Mengelola seluruh flow OAuth secara eksplisit.
-    Kembalikan True jika sudah terkoneksi, False jika belum.
-    """
-    # Cek apakah sudah punya creds
     creds = get_google_creds()
     if creds:
         return True
 
-    # Cek apakah ada secrets google_credentials
     try:
         _ = st.secrets["google_credentials"]
         secrets_ok = True
@@ -548,7 +697,6 @@ def handle_google_oauth():
         secrets_ok = False
 
     if not secrets_ok:
-        # Mode lokal — coba credentials.json
         try:
             from google.oauth2.credentials import Credentials
             from google_auth_oauthlib.flow import InstalledAppFlow
@@ -570,10 +718,8 @@ def handle_google_oauth():
                 return True
         except:
             pass
-        return True  # Mode lokal tanpa Google — fitur Google dinonaktifkan tapi app tetap jalan
+        return True
 
-    # ── Tampilkan UI login Google ───────────────────────────────────────────
-    # Cek apakah ada auth_code yang baru dikonfirmasi
     if st.session_state.get("_pending_auth_code"):
         code = st.session_state.pop("_pending_auth_code")
         try:
@@ -582,7 +728,6 @@ def handle_google_oauth():
             flow.fetch_token(code=code)
             creds = flow.credentials
             st.session_state._google_creds = creds
-            # Tampilkan token untuk disimpan
             token_dict = {
                 "token": creds.token,
                 "refresh_token": creds.refresh_token,
@@ -596,7 +741,6 @@ def handle_google_oauth():
             st.session_state._oauth_error = str(e)
             st.rerun()
 
-    # Tampilkan token jika baru login
     if st.session_state.get("_show_token"):
         st.success("✅ Login Google berhasil! SAMS sudah terhubung.")
         st.markdown("""
@@ -618,24 +762,18 @@ def handle_google_oauth():
             st.rerun()
         return False
 
-    # Tampilkan error jika ada
     if st.session_state.get("_oauth_error"):
         st.error(f"❌ Login gagal: {st.session_state._oauth_error}")
         st.info("Coba klik Login lagi dan pastikan kode yang di-paste benar.")
         st.session_state._oauth_error = None
 
-    # Generate auth URL
     flow, redirect_uri = build_oauth_flow()
     if not flow:
         st.error("❌ Konfigurasi Google belum lengkap di Streamlit Secrets.")
-        return True  # Lanjutkan app tanpa Google
+        return True
 
-    auth_url, _ = flow.authorization_url(
-        access_type="offline",
-        prompt="consent",
-    )
+    auth_url, _ = flow.authorization_url(access_type="offline", prompt="consent")
 
-    # Tampilkan panel login
     st.markdown("""
     <div style='background:rgba(26,58,42,0.7);border:1.5px solid rgba(122,184,146,0.4);
                 border-radius:16px;padding:2rem;margin:1rem 0;text-align:center;'>
@@ -644,9 +782,8 @@ def handle_google_oauth():
             Hubungkan Akun Google
         </div>
         <div style='color:#7ab892;font-size:0.85rem;max-width:500px;margin:0 auto 1rem;line-height:1.6'>
-            SAMS memerlukan akses Google untuk menyinkronkan agenda ke <b style='color:#a8d5b5'>Google Calendar</b>
-            dan transaksi ke <b style='color:#a8d5b5'>Google Sheets</b>.
-            Klik tombol di bawah, login, lalu paste kode yang muncul.
+            SAMS memerlukan akses Google untuk menyinkronkan agenda ke <b style='color:#a8d5b5'>Google Calendar</b>,
+            transaksi ke <b style='color:#a8d5b5'>Google Sheets</b>, dan catatan ke <b style='color:#a8d5b5'>Google Drive</b>.
         </div>
     </div>
     """, unsafe_allow_html=True)
@@ -689,7 +826,6 @@ def handle_google_oauth():
                      key="confirm_google_auth", use_container_width=True):
             raw = auth_input.strip()
             if raw:
-                # Ekstrak code dari URL jika user paste full URL
                 if "code=" in raw:
                     import urllib.parse as _up
                     try:
@@ -710,11 +846,10 @@ def handle_google_oauth():
             st.session_state._google_creds = "SKIP"
             st.rerun()
 
-    st.stop()  # Hentikan render sampai login selesai
+    st.stop()
     return False
 
 def add_google_calendar_event(title, description, start_dt, end_dt):
-    """Add event to Google Calendar."""
     creds = get_google_creds()
     if not creds or creds == "SKIP":
         return False, "Google belum terhubung — event disimpan lokal."
@@ -735,27 +870,7 @@ def add_google_calendar_event(title, description, start_dt, end_dt):
     except Exception as e:
         return False, f"Gagal menambahkan ke Google Calendar: {str(e)}"
 
-def append_to_google_sheet(entries):
-    """Append finance entries to Google Sheet."""
-    sheet_id = get_env("GOOGLE_SHEET_ID")
-    creds = get_google_creds()
-    if not creds or creds == "SKIP" or not sheet_id:
-        return False, "Google Sheets belum terhubung — data disimpan lokal."
-    try:
-        from googleapiclient.discovery import build
-        service = build("sheets", "v4", credentials=creds)
-        values = [[e["date"], e["description"], e["type"], e["amount"]] for e in entries]
-        body = {"values": values}
-        service.spreadsheets().values().append(
-            spreadsheetId=sheet_id, range="Sheet1!A:D",
-            valueInputOption="USER_ENTERED", body=body
-        ).execute()
-        return True, "Data tersimpan ke Google Sheets ✓"
-    except Exception as e:
-        return False, f"Gagal menyimpan ke Google Sheets: {str(e)}"
-
 def upload_audio_to_drive(audio_bytes, filename):
-    """Upload audio to Google Drive and return file_id."""
     folder_id = get_env("GOOGLE_DRIVE_FOLDER_ID")
     creds = get_google_creds()
     if not creds or creds == "SKIP":
@@ -782,6 +897,41 @@ def delete_drive_file(file_id):
     except:
         pass
 
+# ─── LOAD DATA FROM GOOGLE SHEETS (once per session) ─────────────────────────
+def load_data_from_sheets():
+    """Load all persistent data from Google Sheets at session start."""
+    if st.session_state._data_loaded:
+        return
+
+    _gcreds = get_google_creds()
+    if not _gcreds or _gcreds == "SKIP":
+        st.session_state._data_loaded = True
+        return
+
+    sheet_id = get_env("GOOGLE_SHEET_ID")
+    if not sheet_id:
+        st.session_state._data_loaded = True
+        return
+
+    service = get_sheets_service()
+    if service:
+        # Ensure all tabs exist
+        ensure_sheet_tabs(service, sheet_id)
+
+    with st.spinner("🌿 Memuat data dari Google Sheets…"):
+        finance_data = load_finance_from_sheet()
+        events_data  = load_events_from_sheet()
+        notes_data   = load_notes_from_sheet()
+
+    if finance_data:
+        st.session_state.finance_entries = finance_data
+    if events_data:
+        st.session_state.todo_events = events_data
+    if notes_data:
+        st.session_state.note_transcriptions = notes_data
+
+    st.session_state._data_loaded = True
+
 # ─── AI CALLS ────────────────────────────────────────────────────────────────
 SYSTEM_TODO = """Kamu adalah SAMS Todo Agent, asisten cerdas berbahasa Indonesia untuk manajemen jadwal.
 Bantu user mencatat, mengorganisir, dan mengingatkan aktivitas mereka.
@@ -804,7 +954,6 @@ Buat catatan yang terstruktur dengan: ringkasan utama, poin-poin penting, dan ac
 Format dengan markdown yang bersih."""
 
 def call_ai(system_prompt: str, messages: list, tab_key: str) -> str:
-    """Call OpenAI with budget guard."""
     if st.session_state.budget_exceeded:
         return "⚠️ Budget $0.05 untuk sesi ini telah habis. Mohon refresh halaman untuk sesi baru."
 
@@ -813,7 +962,6 @@ def call_ai(system_prompt: str, messages: list, tab_key: str) -> str:
         st.session_state.budget_exceeded = True
         return "⚠️ Budget $0.05 untuk sesi ini telah habis."
 
-    # Estimate max output tokens from remaining budget
     max_out = min(800, int(budget_remaining / 0.00000060))
     if max_out < 50:
         st.session_state.budget_exceeded = True
@@ -836,7 +984,6 @@ def call_ai(system_prompt: str, messages: list, tab_key: str) -> str:
         return f"❌ Error AI: {str(e)}"
 
 def transcribe_audio(audio_bytes: bytes) -> str:
-    """Transcribe audio using OpenAI Whisper."""
     if st.session_state.budget_exceeded:
         return "Budget habis."
     try:
@@ -847,8 +994,7 @@ def transcribe_audio(audio_bytes: bytes) -> str:
         with open(tmp_path, "rb") as f:
             transcript = client.audio.transcriptions.create(model="whisper-1", file=f)
         os.unlink(tmp_path)
-        # Whisper cost: ~$0.006/min, estimate 5 min → $0.03 per call
-        st.session_state.total_tokens_used += 60_000  # conservative token budget hit
+        st.session_state.total_tokens_used += 60_000
         return transcript.text
     except Exception as e:
         return f"Error transkripsi: {str(e)}"
@@ -886,11 +1032,12 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 st.markdown("<div style='height:1rem'></div>", unsafe_allow_html=True)
 
-# ─── GOOGLE AUTH (harus sebelum tabs) ────────────────────────────────────────
+# ─── GOOGLE AUTH ─────────────────────────────────────────────────────────────
 handle_google_oauth()
 
 _gcreds = get_google_creds()
 _google_ok = _gcreds is not None and _gcreds != "SKIP"
+
 if _google_ok:
     st.markdown("""
     <div style='display:inline-flex;align-items:center;gap:8px;margin-bottom:0.8rem;
@@ -902,6 +1049,10 @@ if _google_ok:
         </span>
     </div>
     """, unsafe_allow_html=True)
+
+    # ── Load persistent data from Sheets (only once per session) ──────────
+    load_data_from_sheets()
+
 else:
     st.markdown("""
     <div style='display:inline-flex;align-items:center;gap:8px;margin-bottom:0.8rem;
@@ -909,7 +1060,7 @@ else:
                 border-radius:8px;padding:6px 14px;'>
         <span style='color:#c8a84b'>●</span>
         <span style='color:#c8a84b;font-size:0.78rem;font-weight:600'>
-            Mode Offline — data disimpan lokal
+            Mode Offline — data disimpan lokal sesi ini saja
         </span>
     </div>
     """, unsafe_allow_html=True)
@@ -927,16 +1078,15 @@ with tab1:
             <span style='font-size:0.7rem;color:#7ab892;margin-left:auto;
                   background:rgba(74,140,92,0.15);padding:3px 10px;border-radius:12px;
                   border:1px solid rgba(74,140,92,0.3);'>
-                Terintegrasi Google Calendar
+                Terintegrasi Google Calendar & Sheets
             </span>
         </div>
         <p style='color:#7ab892;font-size:0.82rem;margin:0'>
-            Ceritakan aktivitas atau agenda Anda — SAMS akan mencatatnya dan menambahkan ke Google Calendar secara otomatis.
+            Ceritakan aktivitas atau agenda Anda — SAMS akan mencatatnya ke Google Calendar dan Sheets secara otomatis.
         </p>
     </div>
     """, unsafe_allow_html=True)
 
-    # Display existing events
     if st.session_state.todo_events:
         st.markdown("<div class='card-title' style='font-size:0.9rem;margin-bottom:0.5rem'>📋 Agenda Tersimpan</div>", unsafe_allow_html=True)
         for i, ev in enumerate(reversed(st.session_state.todo_events[-10:])):
@@ -964,26 +1114,22 @@ with tab1:
 
     st.markdown("<hr class='sams-divider'>", unsafe_allow_html=True)
 
-    # Chat history
     for msg in st.session_state.todo_messages[-6:]:
         role = msg["role"]
         css = "chat-msg-user" if role == "user" else "chat-msg-ai"
         label_css = "msg-label-user" if role == "user" else "msg-label-ai"
         label = "Anda" if role == "user" else "🌿 SAMS"
         content = msg["content"]
-        # Strip JSON from display
-        display_content = content
         if role == "assistant" and "{" in content:
             import re
-            display_content = re.sub(r'\{[^}]*\}', '', content).strip()
+            content = re.sub(r'\{[^}]*\}', '', content).strip()
         st.markdown(f"""
         <div class="{css}">
             <div class="msg-label {label_css}">{label}</div>
-            {display_content}
+            {content}
         </div>
         """, unsafe_allow_html=True)
 
-    # Input form
     with st.container():
         col_input, col_btn = st.columns([5, 1])
         with col_input:
@@ -1005,14 +1151,12 @@ with tab1:
 
         st.session_state.todo_messages.append({"role": "assistant", "content": reply})
 
-        # Parse JSON action
         if '{"action":"add_event"' in reply:
             import re, json as _json
             m = re.search(r'\{[^}]*"action"\s*:\s*"add_event"[^}]*\}', reply, re.DOTALL)
             if m:
                 try:
                     data = _json.loads(m.group())
-                    ev_date = datetime.datetime.strptime(data["date"], "%Y-%m-%d").date()
                     ev_start = datetime.datetime.strptime(f"{data['date']} {data['start_time']}", "%Y-%m-%d %H:%M")
                     ev_end   = datetime.datetime.strptime(f"{data['date']} {data['end_time']}",   "%Y-%m-%d %H:%M")
                     ok, gcal_msg = add_google_calendar_event(
@@ -1027,15 +1171,16 @@ with tab1:
                         "synced": ok,
                     }
                     st.session_state.todo_events.append(ev_entry)
+                    # ── Persist to Sheets ──
+                    append_event_to_sheet(ev_entry)
                     if ok:
-                        st.success(gcal_msg)
+                        st.success(f"{gcal_msg} · Tersimpan di Sheets ✓")
                     else:
-                        st.info(f"💾 Tersimpan lokal. {gcal_msg}")
+                        st.info(f"💾 Tersimpan di Sheets. {gcal_msg}")
                 except:
                     pass
         st.rerun()
 
-    # Quick-add form
     with st.expander("➕ Tambah Agenda Manual", expanded=False):
         st.markdown("<div style='color:#7ab892;font-size:0.82rem;margin-bottom:0.8rem'>Form cepat untuk menambah agenda tanpa AI</div>", unsafe_allow_html=True)
         c1, c2, c3 = st.columns(3)
@@ -1055,13 +1200,16 @@ with tab1:
                 start_dt = datetime.datetime.combine(qa_date, qa_start)
                 end_dt   = datetime.datetime.combine(qa_date, qa_end)
                 ok, msg  = add_google_calendar_event(qa_title, qa_desc, start_dt, end_dt)
-                st.session_state.todo_events.append({
+                ev_entry = {
                     "title": qa_title, "date": str(qa_date),
                     "start_time": qa_start.strftime("%H:%M"),
                     "end_time": qa_end.strftime("%H:%M"),
                     "description": qa_desc, "synced": ok,
-                })
-                st.success(msg) if ok else st.info(f"💾 Disimpan lokal. {msg}")
+                }
+                st.session_state.todo_events.append(ev_entry)
+                # ── Persist to Sheets ──
+                append_event_to_sheet(ev_entry)
+                st.success(f"{msg} · Tersimpan di Sheets ✓") if ok else st.info(f"💾 Tersimpan di Sheets. {msg}")
                 st.rerun()
             else:
                 st.warning("Masukkan judul kegiatan.")
@@ -1078,16 +1226,15 @@ with tab2:
             <span style='font-size:0.7rem;color:#c8a84b;margin-left:auto;
                   background:rgba(200,168,75,0.12);padding:3px 10px;border-radius:12px;
                   border:1px solid rgba(200,168,75,0.3);'>
-                Google Sheets Sync
+                Google Sheets Sync ✓
             </span>
         </div>
         <p style='color:#7ab892;font-size:0.82rem;margin:0'>
-            Catat semua pemasukan dan pengeluaran Anda. Data tersimpan real-time di Google Sheets.
+            Semua transaksi tersimpan permanen di Google Sheets — data tetap ada meski browser ditutup.
         </p>
     </div>
     """, unsafe_allow_html=True)
 
-    # ── Summary metrics
     df = pd.DataFrame(st.session_state.finance_entries) if st.session_state.finance_entries else pd.DataFrame(columns=["date","description","type","amount"])
     if not df.empty:
         df["amount"]   = pd.to_numeric(df["amount"], errors="coerce").fillna(0)
@@ -1112,7 +1259,6 @@ with tab2:
 
     st.markdown("<hr class='sams-divider'>", unsafe_allow_html=True)
 
-    # ── Entry form
     st.markdown("<div class='card-title' style='font-size:0.9rem'>➕ Catat Transaksi</div>", unsafe_allow_html=True)
     c1, c2, c3, c4 = st.columns([3, 1.5, 1, 1])
     with c1:
@@ -1131,8 +1277,12 @@ with tab2:
                 entry = {"date": str(fin_date), "description": fin_desc,
                          "type": fin_type, "amount": fin_amount}
                 st.session_state.finance_entries.append(entry)
-                ok, msg = append_to_google_sheet([entry])
-                st.success(f"✅ Transaksi disimpan! {msg}")
+                # ── Persist to Sheets ──
+                ok, msg = append_finance_to_sheet(entry)
+                if ok:
+                    st.success(f"✅ Transaksi disimpan! {msg}")
+                else:
+                    st.warning(f"⚠️ Tersimpan lokal. {msg}")
                 st.rerun()
             else:
                 st.warning("Lengkapi keterangan dan jumlah.")
@@ -1140,7 +1290,6 @@ with tab2:
         if st.button("🤖 AI Analitik Dashboard", key="fin_analytics", type="secondary", use_container_width=True):
             st.session_state.show_analytics = not st.session_state.show_analytics
 
-    # ── Transaction table
     if not df.empty:
         st.markdown("<hr class='sams-divider'>", unsafe_allow_html=True)
         st.markdown("<div class='card-title' style='font-size:0.9rem'>📊 Riwayat Transaksi</div>", unsafe_allow_html=True)
@@ -1152,12 +1301,10 @@ with tab2:
         st.dataframe(display_df.tail(20).iloc[::-1].reset_index(drop=True),
                      use_container_width=True, hide_index=True)
 
-    # ── Analytics
     if st.session_state.show_analytics and not df.empty:
         st.markdown("<hr class='sams-divider'>", unsafe_allow_html=True)
         st.markdown("<div class='card-title' style='font-size:0.9rem'>🤖 Analisis Keuangan SAMS</div>", unsafe_allow_html=True)
 
-        # Charts
         try:
             import plotly.graph_objects as go
             import plotly.express as px
@@ -1189,7 +1336,6 @@ with tab2:
             )
             st.plotly_chart(fig, use_container_width=True)
 
-            # Pie chart
             cat_spend = df_plot[df_plot["type"]=="pengeluaran"].groupby("description")["amount"].sum().nlargest(8)
             if not cat_spend.empty:
                 fig2 = go.Figure(go.Pie(
@@ -1210,7 +1356,6 @@ with tab2:
         except Exception as e:
             st.warning(f"Chart error: {e}")
 
-        # AI advice
         with st.spinner("🌿 SAMS sedang menganalisis keuangan Anda…"):
             total_out = df[df["type"]=="pengeluaran"]["amount"].sum()
             total_in  = df[df["type"]=="pemasukan"]["amount"].sum()
@@ -1230,7 +1375,6 @@ with tab2:
         </div>
         """, unsafe_allow_html=True)
 
-    # ── AI Chat for finance
     st.markdown("<hr class='sams-divider'>", unsafe_allow_html=True)
     st.markdown("<div class='card-title' style='font-size:0.9rem'>💬 Tanya SAMS Finance Agent</div>", unsafe_allow_html=True)
 
@@ -1266,7 +1410,6 @@ with tab2:
             reply = call_ai(SYSTEM_FINANCE, st.session_state.finance_messages[-4:], "finance")
         st.session_state.finance_messages.append({"role":"assistant","content":reply})
 
-        # Parse auto-add entry
         if '{"action":"add_entry"' in reply:
             import re, json as _json
             m = re.search(r'\{[^}]*"action"\s*:\s*"add_entry"[^}]*\}', reply, re.DOTALL)
@@ -1278,8 +1421,9 @@ with tab2:
                              "type": data["type"],
                              "amount": data["amount"]}
                     st.session_state.finance_entries.append(entry)
-                    append_to_google_sheet([entry])
-                    st.success(f"✅ Transaksi '{data['description']}' (Rp {data['amount']:,.0f}) ditambahkan otomatis!")
+                    # ── Persist to Sheets ──
+                    append_finance_to_sheet(entry)
+                    st.success(f"✅ Transaksi '{data['description']}' (Rp {data['amount']:,.0f}) ditambahkan & disimpan ke Sheets!")
                 except:
                     pass
         st.rerun()
@@ -1294,16 +1438,15 @@ with tab3:
             <span style='font-size:0.7rem;color:#7ab892;margin-left:auto;
                   background:rgba(74,140,92,0.12);padding:3px 10px;border-radius:12px;
                   border:1px solid rgba(74,140,92,0.3);'>
-                Google Drive + Keep
+                Google Drive + Sheets
             </span>
         </div>
         <p style='color:#7ab892;font-size:0.82rem;margin:0'>
-            Rekam kuliah atau diskusi — SAMS mengubah suara menjadi catatan terstruktur dan menyimpannya otomatis.
+            Rekam kuliah atau diskusi — SAMS mengubah suara menjadi catatan terstruktur dan menyimpannya permanen di Google Sheets.
         </p>
     </div>
     """, unsafe_allow_html=True)
 
-    # ── Microphone permission check
     if st.session_state.mic_permission is None:
         st.markdown("""
         <div style='background:rgba(26,58,42,0.6);border:1.5px solid rgba(122,184,146,0.4);
@@ -1335,7 +1478,6 @@ with tab3:
             st.rerun()
 
     else:
-        # ── Recording interface
         st.markdown("<div class='card-title' style='font-size:0.9rem'>🎙️ Sesi Rekaman Baru</div>",
                     unsafe_allow_html=True)
 
@@ -1350,12 +1492,12 @@ with tab3:
         st.markdown("""
         <div style='background:rgba(200,168,75,0.08);border:1px solid rgba(200,168,75,0.25);
                     border-radius:10px;padding:0.8rem 1rem;margin:0.5rem 0;font-size:0.8rem;color:#c8a84b;'>
-            ⚠️ <strong>Catatan:</strong> Rekaman suara disimpan sementara di Google Drive (maks. 1 jam).
+            ⚠️ <strong>Catatan:</strong> Rekaman suara disimpan sementara di Google Drive.
             Setelah berhasil ditranskripsi, file audio akan dihapus otomatis.
+            Teks catatan disimpan permanen di Google Sheets.
         </div>
         """, unsafe_allow_html=True)
 
-        # Upload audio file (browser-compatible alternative to live recording)
         st.markdown("<hr class='sams-divider'>", unsafe_allow_html=True)
         st.markdown("<div style='color:#7ab892;font-size:0.82rem;margin-bottom:0.5rem'>📁 Upload File Audio (WAV/MP3/M4A, maks. 25MB)</div>", unsafe_allow_html=True)
 
@@ -1404,8 +1546,10 @@ with tab3:
                                 "drive_file_id": file_id,
                             }
                             st.session_state.note_transcriptions.append(entry)
+                            # ── Persist to Sheets ──
+                            append_note_to_sheet(entry)
+                            st.success("✅ Catatan disimpan ke Google Sheets ✓")
 
-                            # Delete drive file
                             if file_id:
                                 with st.spinner("🗑️ Menghapus file audio dari Drive…"):
                                     delete_drive_file(file_id)
@@ -1421,7 +1565,6 @@ with tab3:
                     st.session_state.audio_bytes = None
                     st.rerun()
 
-        # ── Saved transcriptions
         if st.session_state.note_transcriptions:
             st.markdown("<hr class='sams-divider'>", unsafe_allow_html=True)
             st.markdown("<div class='card-title' style='font-size:0.9rem'>📝 Catatan Tersimpan</div>",
@@ -1436,7 +1579,6 @@ with tab3:
                         st.markdown(f"<div style='color:#a8d5b5;font-size:0.83rem;line-height:1.6;font-family:monospace;background:rgba(10,30,18,0.5);padding:1rem;border-radius:8px'>{entry['transcript']}</div>",
                                     unsafe_allow_html=True)
 
-        # ── AI Chat for notes
         if st.session_state.note_transcriptions:
             st.markdown("<hr class='sams-divider'>", unsafe_allow_html=True)
             st.markdown("<div class='card-title' style='font-size:0.9rem'>💬 Tanya Tentang Catatan Anda</div>",
