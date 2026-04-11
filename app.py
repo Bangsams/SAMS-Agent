@@ -215,23 +215,16 @@ SHEET_HEADERS = ["Tanggal", "Keterangan", "Jenis", "Jumlah (Rp)", "Timestamp Inp
 
 @st.cache_resource(show_spinner=False)
 def get_gspread_client():
-    """
-    Buat gspread client dari Service Account di Streamlit Secrets.
-    Mendukung format [gcp_service_account] dengan semua field lengkap dari JSON key.
-    Di-cache agar tidak reconnect setiap rerun.
-    """
     try:
         import gspread
         from google.oauth2.service_account import Credentials
 
         sa = st.secrets["gcp_service_account"]
 
-        # Bangun dict lengkap — semua field dari JSON service account key
         info = {
             "type":                        str(sa.get("type", "service_account")),
             "project_id":                  str(sa["project_id"]),
             "private_key_id":              str(sa["private_key_id"]),
-            # Normalisasi \n literal (dari TOML single-quote) jadi newline asli
             "private_key":                 str(sa["private_key"]).replace("\\n", "\n"),
             "client_email":                str(sa["client_email"]),
             "client_id":                   str(sa["client_id"]),
@@ -261,13 +254,6 @@ def get_gspread_client():
 
 
 def get_sheet_tab_name() -> str:
-    """
-    Baca nama tab sheet dari [google_sheets] secrets jika ada.
-    Fallback ke SHEET_TAB default ('Finance').
-    Contoh secrets.toml:
-        [google_sheets]
-        sheet_name = "Finance"
-    """
     try:
         name = str(st.secrets["google_sheets"]["sheet_name"])
         return name if name.strip() else SHEET_TAB
@@ -277,10 +263,6 @@ def get_sheet_tab_name() -> str:
 
 @st.cache_resource(show_spinner=False)
 def get_worksheet():
-    """
-    Buka worksheet 'Finance'. Jika belum ada, buat + tulis header.
-    Di-cache supaya tidak re-open setiap rerun.
-    """
     gc = get_gspread_client()
     sheet_id = get_secret("GOOGLE_SHEET_ID")
     if not gc or not sheet_id:
@@ -291,17 +273,14 @@ def get_worksheet():
     except Exception as e:
         return None, f"❌ Tidak bisa membuka spreadsheet: {e}"
 
-    # Nama tab dibaca dari [google_sheets] secrets, fallback ke SHEET_TAB
     tab_name = get_sheet_tab_name()
 
-    # Cek/buat tab
     try:
         ws = spreadsheet.worksheet(tab_name)
     except Exception:
         ws = spreadsheet.add_worksheet(title=tab_name, rows=1000, cols=10)
         ws.append_row(SHEET_HEADERS, value_input_option="USER_ENTERED")
 
-    # Pastikan header ada di baris pertama
     try:
         first_row = ws.row_values(1)
         if first_row != SHEET_HEADERS:
@@ -320,10 +299,6 @@ def sheet_status() -> tuple[bool, str]:
 # ── READ ALL ──────────────────────────────────────────────────────────────────
 
 def load_finance_from_sheet() -> list[dict]:
-    """
-    Muat semua baris dari sheet Finance.
-    Return list of dicts.
-    """
     ws, _ = get_worksheet()
     if ws is None:
         return []
@@ -350,10 +325,6 @@ def load_finance_from_sheet() -> list[dict]:
 # ── APPEND ONE ROW ────────────────────────────────────────────────────────────
 
 def append_finance_to_sheet(entry: dict) -> tuple[bool, str]:
-    """
-    Tambahkan satu baris ke sheet Finance.
-    Return (success, message).
-    """
     ws, msg = get_worksheet()
     if ws is None:
         return False, msg
@@ -375,10 +346,6 @@ def append_finance_to_sheet(entry: dict) -> tuple[bool, str]:
 # ── DELETE ROW BY INDEX ───────────────────────────────────────────────────────
 
 def delete_finance_row(sheet_row_index: int) -> tuple[bool, str]:
-    """
-    Hapus baris berdasarkan index baris di sheet (1-based, termasuk header).
-    sheet_row_index = data_index + 2  (karena header di baris 1, data mulai baris 2)
-    """
     ws, msg = get_worksheet()
     if ws is None:
         return False, msg
@@ -446,12 +413,12 @@ def call_ai(messages: list) -> str:
         return f"❌ Error AI: {e}"
 
 
-
+# ── PERBAIKAN: escape kurung kurawal literal di contoh JSON ──────────────────
 SYSTEM_TODO = """Kamu adalah SAMS Todo Agent, asisten jadwal cerdas berbahasa Indonesia.
 Tugasmu: ekstrak informasi kegiatan dari pesan user dan simpan ke Google Calendar.
 
 Jika user menyebutkan kegiatan/aktivitas, ekstrak dan balas dengan JSON ini (plus kalimat ramah):
-{"action":"add_event","title":"...","date":"YYYY-MM-DD","start_time":"HH:MM","end_time":"HH:MM","description":"...","location":"..."}
+{{"action":"add_event","title":"...","date":"YYYY-MM-DD","start_time":"HH:MM","end_time":"HH:MM","description":"...","location":"..."}}
 
 Aturan:
 - "date" format YYYY-MM-DD. Jika user bilang "besok", hitung dari hari ini.
@@ -548,10 +515,6 @@ def get_calendar_service():
 def add_google_calendar_event(title: str, date_str: str, start_time: str,
                                end_time: str, description: str = "",
                                location: str = "") -> tuple[bool, str, str]:
-    """
-    Tambahkan event ke Google Calendar.
-    Return (success, message, event_link).
-    """
     svc, err = get_calendar_service()
     if svc is None:
         return False, f"❌ Gagal konek Calendar: {err}", ""
@@ -639,15 +602,15 @@ def init_state():
     defaults = {
         "total_tokens":       0,
         "budget_exceeded":    False,
-        "finance_entries":    [],       # list[dict] — mirror dari sheet
-        "chat_messages":      [],       # list[dict] role/content
-        "sheet_loaded":       False,    # sudah load dari sheet?
+        "finance_entries":    [],
+        "chat_messages":      [],
+        "sheet_loaded":       False,
         "show_analytics":     False,
-        "delete_confirm_idx": None,     # index baris yg mau dihapus
+        "delete_confirm_idx": None,
         # Todo Agent
-        "todo_messages":      [],       # chat history todo
-        "todo_events_cache":  [],       # cache event dari Calendar
-        "todo_cache_loaded":  False,    # sudah load events?
+        "todo_messages":      [],
+        "todo_events_cache":  [],
+        "todo_cache_loaded":  False,
     }
     for k, v in defaults.items():
         if k not in st.session_state:
@@ -793,7 +756,6 @@ tab_todo, tab_catat, tab_riwayat, tab_chat = st.tabs(
 # ══════════════════════════════════════════════════════════════════════════════
 with tab_todo:
 
-    # ── Status koneksi Calendar ───────────────────────────────────────────────
     cal_svc, cal_err = get_calendar_service()
     cal_ok = cal_svc is not None
 
@@ -829,7 +791,6 @@ with tab_todo:
         st.markdown("<div class='card-title' style='font-size:.9rem;margin-bottom:.5rem'>📋 Agenda Mendatang</div>",
                     unsafe_allow_html=True)
 
-        # Group by date
         from collections import defaultdict
         grouped = defaultdict(list)
         for ev in events_cache:
@@ -886,7 +847,6 @@ with tab_todo:
     st.markdown("<div class='card-title' style='font-size:.9rem'>💬 Ceritakan Kegiatan Anda</div>",
                 unsafe_allow_html=True)
 
-    # Display chat history
     for msg in st.session_state["todo_messages"][-10:]:
         role = msg["role"]
         css  = "msg-user" if role=="user" else "msg-ai"
@@ -913,7 +873,6 @@ with tab_todo:
     with ti2:
         send_todo = st.button("Kirim →", type="primary", use_container_width=True, key="btn_send_todo")
 
-    # Quick prompts todo
     tqp_cols = st.columns(3)
     todo_quick = [
         "📋 Tampilkan agenda minggu ini",
@@ -936,7 +895,6 @@ with tab_todo:
 
         st.session_state["todo_messages"].append({"role": "assistant", "content": reply})
 
-        # ── Deteksi JSON event dari reply ─────────────────────────────────────
         if '"action":"add_event"' in reply or '"action": "add_event"' in reply:
             m = re.search(r'\{[^{}]*"action"\s*:\s*"add_event"[^{}]*\}', reply, re.DOTALL)
             if m:
@@ -951,7 +909,6 @@ with tab_todo:
                         location=data.get("location", ""),
                     )
                     if ok:
-                        # Refresh cache events
                         st.session_state["todo_cache_loaded"] = False
                         st.success(f"{cal_msg} 🎉" + (f" [Buka di Calendar]({link})" if link else ""))
                     else:
@@ -1038,7 +995,6 @@ with tab_todo:
                         st.error(msg)
 
 
-
 # ══════════════════════════════════════════════════════════════════════════════
 # TAB 1 — CATAT TRANSAKSI
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1106,7 +1062,6 @@ with tab_catat:
                 "amount":      float(f_amount),
                 "ts":          datetime.datetime.now().strftime("%d/%m/%Y %H:%M"),
             }
-            # ── SIMPAN KE SHEET ────────────────────────────────────────────
             with st.spinner("☁️ Menyimpan ke Google Sheets…"):
                 ok, msg = append_finance_to_sheet(entry)
 
@@ -1114,7 +1069,6 @@ with tab_catat:
                 st.session_state["finance_entries"].append(entry)
                 st.success(f"✅ **{f_desc}** — Rp {f_amount:,.0f} ({f_type}) {msg}")
             else:
-                # Tetap simpan lokal supaya tidak hilang
                 st.session_state["finance_entries"].append(entry)
                 st.warning(f"⚠️ Tersimpan lokal (Google Sheets gagal: {msg}). Data belum permanen.")
 
@@ -1197,12 +1151,10 @@ with tab_riwayat:
                 min_value=1, max_value=len(entries), step=1, value=1, key="del_idx"
             )
             if st.button("🗑️ Hapus Baris Ini", type="secondary", key="del_btn"):
-                # sheet row = del_idx + 1 (header di baris 1, data mulai baris 2)
                 sheet_row = int(del_idx) + 1
                 with st.spinner("🗑️ Menghapus dari Google Sheets…"):
                     ok, msg = delete_finance_row(sheet_row)
                 if ok:
-                    # Hapus dari session state juga
                     if 0 <= del_idx-1 < len(st.session_state["finance_entries"]):
                         st.session_state["finance_entries"].pop(del_idx-1)
                     st.success(msg)
@@ -1222,7 +1174,6 @@ with tab_riwayat:
             df_plot["date_str"] = df_plot["date_dt"].dt.strftime("%Y-%m-%d")
             daily = df_plot.groupby(["date_str","type"])["amount"].sum().reset_index()
 
-            # Bar chart: pemasukan vs pengeluaran per hari
             fig = go.Figure()
             for ftype, color in [("pengeluaran","#e05555"),("pemasukan","#4a8c5c")]:
                 sub = daily[daily["type"]==ftype]
@@ -1243,7 +1194,6 @@ with tab_riwayat:
             )
             st.plotly_chart(fig, use_container_width=True)
 
-            # Pie: distribusi pengeluaran
             cat = df_plot[df_plot["type"]=="pengeluaran"].groupby("description")["amount"].sum().nlargest(8)
             if not cat.empty:
                 fig2 = go.Figure(go.Pie(
@@ -1292,13 +1242,11 @@ with tab_chat:
     if not openai_ok:
         st.warning("⚠️ OPENAI_API_KEY belum dikonfigurasi di Secrets.")
     else:
-        # ── CHAT HISTORY ─────────────────────────────────────────────────────
         for msg in st.session_state["chat_messages"][-10:]:
             role = msg["role"]
             css = "msg-user" if role=="user" else "msg-ai"
             label = "Anda" if role=="user" else "🌿 SAMS"
             lbl_css = "color:#7ab892" if role=="user" else "color:#c8a84b"
-            # Sembunyikan JSON mentah dari tampilan
             content = msg["content"]
             if role == "assistant" and "{" in content:
                 content = re.sub(r'\{[^}]*\}', '', content).strip()
@@ -1309,7 +1257,6 @@ with tab_chat:
             </div>
             """, unsafe_allow_html=True)
 
-        # ── INPUT ─────────────────────────────────────────────────────────────
         ci1, ci2 = st.columns([5, 1])
         with ci1:
             user_input = st.text_input(
@@ -1321,7 +1268,6 @@ with tab_chat:
         with ci2:
             send = st.button("Kirim →", type="primary", use_container_width=True, key="btn_send")
 
-        # ── QUICK PROMPTS ──────────────────────────────────────────────────────
         st.markdown("<div style='display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.4rem'>", unsafe_allow_html=True)
         qp_col = st.columns(4)
         quick_prompts = [
@@ -1336,11 +1282,9 @@ with tab_chat:
                 if st.button(qp, key=f"qp_{i}", use_container_width=True):
                     quick_clicked = qp
 
-        # ── PROSES PESAN ───────────────────────────────────────────────────────
         final_input = quick_clicked or (user_input.strip() if send and user_input.strip() else None)
 
         if final_input:
-            # Sisipkan konteks keuangan ke pesan user
             entries = st.session_state["finance_entries"]
             ctx_lines = []
             if entries:
@@ -1365,7 +1309,7 @@ with tab_chat:
             if ctx_lines:
                 full_msg += "\n\n" + "\n".join(ctx_lines)
 
-            st.session_state["chat_messages"].append({"role": "user", "content": final_input})  # tampilkan tanpa konteks
+            st.session_state["chat_messages"].append({"role": "user", "content": final_input})
 
             with st.spinner("🌿 SAMS sedang menganalisis…"):
                 msgs_for_ai = st.session_state["chat_messages"][:-1] + [{"role":"user","content":full_msg}]
@@ -1373,7 +1317,6 @@ with tab_chat:
 
             st.session_state["chat_messages"].append({"role": "assistant", "content": reply})
 
-            # ── DETEKSI & SIMPAN TRANSAKSI DARI CHAT ─────────────────────────
             if '"action":"add_entry"' in reply or '"action": "add_entry"' in reply:
                 m = re.search(r'\{[^}]*"action"\s*:\s*"add_entry"[^}]*\}', reply, re.DOTALL)
                 if m:
@@ -1399,7 +1342,6 @@ with tab_chat:
 
             st.rerun()
 
-        # ── CLEAR CHAT ────────────────────────────────────────────────────────
         if st.session_state["chat_messages"]:
             if st.button("🗑️ Hapus Riwayat Chat", type="secondary", key="clear_chat"):
                 st.session_state["chat_messages"] = []
