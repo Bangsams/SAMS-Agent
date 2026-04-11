@@ -720,25 +720,29 @@ def handle_google_oauth():
             pass
         return True
 
-    if st.session_state.get("_pending_auth_code"):
-        code = st.session_state.pop("_pending_auth_code")
+    # ── Auto-capture code from URL query params (Google redirect) ─────────
+    qp = st.query_params
+    if "code" in qp and not st.session_state.get("_google_creds"):
+        code = qp["code"]
         try:
             os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1"
             flow, redirect_uri = build_oauth_flow()
             flow.fetch_token(code=code)
             creds = flow.credentials
             st.session_state._google_creds = creds
-            token_dict = {
+            st.session_state._show_token = json.dumps({
                 "token": creds.token,
                 "refresh_token": creds.refresh_token,
                 "token_uri": creds.token_uri,
                 "client_id": creds.client_id,
                 "client_secret": creds.client_secret,
-            }
-            st.session_state._show_token = json.dumps(token_dict, indent=2)
+            }, indent=2)
+            # Clear the code from URL so it won't re-trigger
+            st.query_params.clear()
             st.rerun()
         except Exception as e:
             st.session_state._oauth_error = str(e)
+            st.query_params.clear()
             st.rerun()
 
     if st.session_state.get("_show_token"):
@@ -764,7 +768,7 @@ def handle_google_oauth():
 
     if st.session_state.get("_oauth_error"):
         st.error(f"❌ Login gagal: {st.session_state._oauth_error}")
-        st.info("Coba klik Login lagi dan pastikan kode yang di-paste benar.")
+        st.info("Coba klik Login lagi.")
         st.session_state._oauth_error = None
 
     flow, redirect_uri = build_oauth_flow()
@@ -784,14 +788,15 @@ def handle_google_oauth():
         <div style='color:#7ab892;font-size:0.85rem;max-width:500px;margin:0 auto 1rem;line-height:1.6'>
             SAMS memerlukan akses Google untuk menyinkronkan agenda ke <b style='color:#a8d5b5'>Google Calendar</b>,
             transaksi ke <b style='color:#a8d5b5'>Google Sheets</b>, dan catatan ke <b style='color:#a8d5b5'>Google Drive</b>.
+            <br><br>Klik tombol di bawah — setelah login Google, Anda akan otomatis diarahkan kembali ke SAMS.
         </div>
     </div>
     """, unsafe_allow_html=True)
 
-    col_btn, col_info = st.columns([1, 2])
+    col_btn, col_skip = st.columns(2)
     with col_btn:
         st.markdown(f"""
-        <a href="{auth_url}" target="_blank" style="text-decoration:none;">
+        <a href="{auth_url}" target="_self" style="text-decoration:none;">
             <div style='background:linear-gradient(135deg,#2d5a3d,#4a8c5c);
                         color:white;border:none;padding:14px 28px;border-radius:12px;
                         font-weight:700;cursor:pointer;font-size:0.95rem;text-align:center;
@@ -801,45 +806,6 @@ def handle_google_oauth():
             </div>
         </a>
         """, unsafe_allow_html=True)
-
-    with col_info:
-        st.markdown("""
-        <div style='color:#7ab892;font-size:0.8rem;line-height:1.8;padding-top:0.3rem'>
-            <b style='color:#a8d5b5'>Cara mendapatkan kode:</b><br>
-            1. Klik tombol Login → browser terbuka<br>
-            2. Pilih akun Google → klik Allow<br>
-            3. Browser redirect → <b>copy seluruh URL</b> dari address bar<br>
-            4. Paste URL (atau hanya bagian <code>code=xxx</code>) di bawah
-        </div>
-        """, unsafe_allow_html=True)
-
-    st.markdown("<div style='height:0.5rem'></div>", unsafe_allow_html=True)
-    auth_input = st.text_input(
-        "Paste URL lengkap atau kode (code=...) setelah login Google:",
-        placeholder="https://sams-agent-10.streamlit.app/oauth2callback?code=4/0AX4... atau hanya 4/0AX4...",
-        key="google_auth_input",
-        label_visibility="visible",
-    )
-    col_ok, col_skip = st.columns(2)
-    with col_ok:
-        if st.button("✅ Konfirmasi & Hubungkan", type="primary",
-                     key="confirm_google_auth", use_container_width=True):
-            raw = auth_input.strip()
-            if raw:
-                if "code=" in raw:
-                    import urllib.parse as _up
-                    try:
-                        parsed = _up.urlparse(raw)
-                        params = _up.parse_qs(parsed.query)
-                        code = params.get("code", [raw])[0]
-                    except:
-                        code = raw
-                else:
-                    code = raw
-                st.session_state._pending_auth_code = code
-                st.rerun()
-            else:
-                st.warning("Paste URL atau kode terlebih dahulu.")
     with col_skip:
         if st.button("⏭️ Lewati (tanpa Google)", type="secondary",
                      key="skip_google_auth", use_container_width=True):
