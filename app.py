@@ -395,7 +395,7 @@ def tokens_to_usd(tokens: int) -> float:
 
 MAX_BUDGET_USD = 0.05
 
-# ─── GOOGLE SERVICES ─────────────────────────────────────────────────────────
+# ─── GOOGLE SERVICES (Service Account — no login needed) ─────────────────────
 GOOGLE_SCOPES = [
     "https://www.googleapis.com/auth/calendar",
     "https://www.googleapis.com/auth/spreadsheets",
@@ -407,6 +407,9 @@ SHEET_FINANCE  = "Finance"
 SHEET_EVENTS   = "Events"
 SHEET_NOTES    = "Notes"
 
+# Calendar ID pemilik — service account akan menulis ke kalender ini
+CALENDAR_ID = "lololzolzol@gmail.com"
+
 def get_env(key, default=None):
     try:
         val = st.secrets[key]
@@ -414,73 +417,53 @@ def get_env(key, default=None):
     except:
         return os.getenv(key, default)
 
-def build_oauth_flow():
-    try:
-        gc = st.secrets["google_credentials"]
-        client_id     = str(gc["client_id"])
-        client_secret = str(gc["client_secret"])
-        redirect_uri  = str(gc.get("redirect_uri", "https://sams-agent-10.streamlit.app/"))
-        from google_auth_oauthlib.flow import Flow
-        flow = Flow.from_client_config(
-            {
-                "web": {
-                    "client_id": client_id,
-                    "client_secret": client_secret,
-                    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-                    "token_uri": "https://oauth2.googleapis.com/token",
-                    "redirect_uris": [redirect_uri],
-                }
-            },
-            scopes=GOOGLE_SCOPES,
-            redirect_uri=redirect_uri,
-        )
-        return flow, redirect_uri
-    except Exception as e:
-        return None, None
-
+@st.cache_resource
 def get_google_creds():
-    from google.oauth2.credentials import Credentials
-    from google.auth.transport.requests import Request
-
+    """
+    Gunakan Service Account JSON dari Streamlit Secrets.
+    Simpan di secrets.toml:
+        [gcp_service_account]
+        type = "service_account"
+        project_id = "..."
+        private_key_id = "..."
+        private_key = "-----BEGIN RSA PRIVATE KEY-----\\n..."
+        client_email = "xxx@xxx.iam.gserviceaccount.com"
+        client_id = "..."
+        token_uri = "https://oauth2.googleapis.com/token"
+    """
     try:
-        tk = st.secrets["google_token"]
-        creds = Credentials(
-            token=str(tk.get("token", "")),
-            refresh_token=str(tk["refresh_token"]),
-            token_uri=str(tk.get("token_uri", "https://oauth2.googleapis.com/token")),
-            client_id=str(tk["client_id"]),
-            client_secret=str(tk["client_secret"]),
-            scopes=GOOGLE_SCOPES,
+        from google.oauth2 import service_account
+        sa = st.secrets["gcp_service_account"]
+        info = {
+            "type": "service_account",
+            "project_id": str(sa["project_id"]),
+            "private_key_id": str(sa["private_key_id"]),
+            "private_key": str(sa["private_key"]).replace("\\n", "\n"),
+            "client_email": str(sa["client_email"]),
+            "client_id": str(sa["client_id"]),
+            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+            "token_uri": str(sa.get("token_uri", "https://oauth2.googleapis.com/token")),
+            "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+            "client_x509_cert_url": str(sa.get("client_x509_cert_url", "")),
+        }
+        creds = service_account.Credentials.from_service_account_info(
+            info, scopes=GOOGLE_SCOPES
         )
-        if not creds.valid:
-            if creds.expired and creds.refresh_token:
-                creds.refresh(Request())
-        st.session_state._google_creds = creds
         return creds
-    except (KeyError, Exception):
-        pass
+    except Exception as e:
+        return None
 
-    if st.session_state.get("_google_creds"):
-        creds = st.session_state["_google_creds"]
-        try:
-            if not creds.valid and creds.expired and creds.refresh_token:
-                creds.refresh(Request())
-        except:
-            pass
-        return creds
-
-    return None
-
-# ─── SHEETS HELPER ───────────────────────────────────────────────────────────
+# ─── SHEETS HELPER ─────────────────────────────────────────────────────────────
 def get_sheets_service():
     creds = get_google_creds()
-    if not creds or creds == "SKIP":
+    if not creds:
         return None
     try:
         from googleapiclient.discovery import build
         return build("sheets", "v4", credentials=creds)
     except:
         return None
+
 
 def ensure_sheet_tabs(service, sheet_id):
     """Make sure Finance, Events, Notes tabs exist with headers."""
@@ -674,9 +657,8 @@ def init_session_state():
         "audio_bytes": None,
         "mic_permission": None,
         "note_title": "",
-        # Flags to track whether we've loaded from Sheets this session
+        # Flag to track whether we've loaded from Sheets this session
         "_data_loaded": False,
-        "_google_creds": None,
     }
     for k, v in defaults.items():
         if k not in st.session_state:
@@ -684,141 +666,11 @@ def init_session_state():
 
 init_session_state()
 
-# ─── GOOGLE AUTH ─────────────────────────────────────────────────────────────
-def handle_google_oauth():
-    creds = get_google_creds()
-    if creds:
-        return True
-
-    try:
-        _ = st.secrets["google_credentials"]
-        secrets_ok = True
-    except:
-        secrets_ok = False
-
-    if not secrets_ok:
-        try:
-            from google.oauth2.credentials import Credentials
-            from google_auth_oauthlib.flow import InstalledAppFlow
-            from google.auth.transport.requests import Request
-            creds_path = os.getenv("GOOGLE_CREDENTIALS_PATH", "credentials.json")
-            if os.path.exists(creds_path):
-                local_creds = None
-                if os.path.exists("token.json"):
-                    local_creds = Credentials.from_authorized_user_file("token.json", GOOGLE_SCOPES)
-                if not local_creds or not local_creds.valid:
-                    if local_creds and local_creds.expired and local_creds.refresh_token:
-                        local_creds.refresh(Request())
-                    else:
-                        flow = InstalledAppFlow.from_client_secrets_file(creds_path, GOOGLE_SCOPES)
-                        local_creds = flow.run_local_server(port=0)
-                    with open("token.json", "w") as f:
-                        f.write(local_creds.to_json())
-                st.session_state._google_creds = local_creds
-                return True
-        except:
-            pass
-        return True
-
-    # ── Auto-capture code from URL query params (Google redirect) ─────────
-    qp = st.query_params
-    if "code" in qp and not st.session_state.get("_google_creds"):
-        code = qp["code"]
-        try:
-            os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1"
-            flow, redirect_uri = build_oauth_flow()
-            flow.fetch_token(code=code)
-            creds = flow.credentials
-            st.session_state._google_creds = creds
-            st.session_state._show_token = json.dumps({
-                "token": creds.token,
-                "refresh_token": creds.refresh_token,
-                "token_uri": creds.token_uri,
-                "client_id": creds.client_id,
-                "client_secret": creds.client_secret,
-            }, indent=2)
-            # Clear the code from URL so it won't re-trigger
-            st.query_params.clear()
-            st.rerun()
-        except Exception as e:
-            st.session_state._oauth_error = str(e)
-            st.query_params.clear()
-            st.rerun()
-
-    if st.session_state.get("_show_token"):
-        st.success("✅ Login Google berhasil! SAMS sudah terhubung.")
-        st.markdown("""
-        <div style='background:rgba(200,168,75,0.1);border:1px solid rgba(200,168,75,0.4);
-                    border-radius:12px;padding:1rem;margin:0.5rem 0;'>
-            <div style='color:#c8a84b;font-weight:700;margin-bottom:0.5rem'>
-                📋 Simpan token ini ke Streamlit Secrets agar tidak perlu login ulang:
-            </div>
-            <div style='color:#a8d5b5;font-size:0.78rem'>
-                Streamlit Cloud → Settings → Secrets → tambahkan:
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-        st.code(f"[google_token]\n" + "\n".join(
-            f'{k} = "{v}"' for k, v in json.loads(st.session_state._show_token).items()
-        ), language="toml")
-        if st.button("▶️ Lanjutkan ke App", type="primary", key="continue_after_login"):
-            st.session_state._show_token = None
-            st.rerun()
-        return False
-
-    if st.session_state.get("_oauth_error"):
-        st.error(f"❌ Login gagal: {st.session_state._oauth_error}")
-        st.info("Coba klik Login lagi.")
-        st.session_state._oauth_error = None
-
-    flow, redirect_uri = build_oauth_flow()
-    if not flow:
-        st.error("❌ Konfigurasi Google belum lengkap di Streamlit Secrets.")
-        return True
-
-    auth_url, _ = flow.authorization_url(access_type="offline", prompt="consent")
-
-    st.markdown("""
-    <div style='background:rgba(26,58,42,0.7);border:1.5px solid rgba(122,184,146,0.4);
-                border-radius:16px;padding:2rem;margin:1rem 0;text-align:center;'>
-        <div style='font-size:2.5rem;margin-bottom:0.8rem'>🔐</div>
-        <div style='font-family:"Playfair Display",serif;font-size:1.4rem;color:#a8d5b5;margin-bottom:0.5rem'>
-            Hubungkan Akun Google
-        </div>
-        <div style='color:#7ab892;font-size:0.85rem;max-width:500px;margin:0 auto 1rem;line-height:1.6'>
-            SAMS memerlukan akses Google untuk menyinkronkan agenda ke <b style='color:#a8d5b5'>Google Calendar</b>,
-            transaksi ke <b style='color:#a8d5b5'>Google Sheets</b>, dan catatan ke <b style='color:#a8d5b5'>Google Drive</b>.
-            <br><br>Klik tombol di bawah — setelah login Google, Anda akan otomatis diarahkan kembali ke SAMS.
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-
-    col_btn, col_skip = st.columns(2)
-    with col_btn:
-        st.markdown(f"""
-        <a href="{auth_url}" target="_self" style="text-decoration:none;">
-            <div style='background:linear-gradient(135deg,#2d5a3d,#4a8c5c);
-                        color:white;border:none;padding:14px 28px;border-radius:12px;
-                        font-weight:700;cursor:pointer;font-size:0.95rem;text-align:center;
-                        box-shadow:0 4px 16px rgba(74,140,92,0.4);margin-bottom:1rem;
-                        display:inline-block;width:100%;box-sizing:border-box;'>
-                🔐 Login dengan Google
-            </div>
-        </a>
-        """, unsafe_allow_html=True)
-    with col_skip:
-        if st.button("⏭️ Lewati (tanpa Google)", type="secondary",
-                     key="skip_google_auth", use_container_width=True):
-            st.session_state._google_creds = "SKIP"
-            st.rerun()
-
-    st.stop()
-    return False
 
 def add_google_calendar_event(title, description, start_dt, end_dt):
     creds = get_google_creds()
-    if not creds or creds == "SKIP":
-        return False, "Google belum terhubung — event disimpan lokal."
+    if not creds:
+        return False, "Service Account belum terkonfigurasi."
     try:
         from googleapiclient.discovery import build
         service = build("calendar", "v3", credentials=creds)
@@ -831,7 +683,7 @@ def add_google_calendar_event(title, description, start_dt, end_dt):
                           "overrides": [{"method":"popup","minutes":30},
                                         {"method":"email","minutes":60}]},
         }
-        service.events().insert(calendarId="primary", body=event).execute()
+        service.events().insert(calendarId=CALENDAR_ID, body=event).execute()
         return True, "Event berhasil ditambahkan ke Google Calendar ✓"
     except Exception as e:
         return False, f"Gagal menambahkan ke Google Calendar: {str(e)}"
@@ -839,8 +691,8 @@ def add_google_calendar_event(title, description, start_dt, end_dt):
 def upload_audio_to_drive(audio_bytes, filename):
     folder_id = get_env("GOOGLE_DRIVE_FOLDER_ID")
     creds = get_google_creds()
-    if not creds or creds == "SKIP":
-        return None, "Google Drive belum terhubung."
+    if not creds:
+        return None, "Service Account belum terkonfigurasi."
     try:
         from googleapiclient.discovery import build
         from googleapiclient.http import MediaIoBaseUpload
@@ -854,7 +706,7 @@ def upload_audio_to_drive(audio_bytes, filename):
 
 def delete_drive_file(file_id):
     creds = get_google_creds()
-    if not creds or creds == "SKIP" or not file_id:
+    if not creds or not file_id:
         return
     try:
         from googleapiclient.discovery import build
@@ -870,7 +722,7 @@ def load_data_from_sheets():
         return
 
     _gcreds = get_google_creds()
-    if not _gcreds or _gcreds == "SKIP":
+    if not _gcreds:
         st.session_state._data_loaded = True
         return
 
@@ -999,10 +851,8 @@ st.markdown(f"""
 st.markdown("<div style='height:1rem'></div>", unsafe_allow_html=True)
 
 # ─── GOOGLE AUTH ─────────────────────────────────────────────────────────────
-handle_google_oauth()
-
 _gcreds = get_google_creds()
-_google_ok = _gcreds is not None and _gcreds != "SKIP"
+_google_ok = _gcreds is not None
 
 if _google_ok:
     st.markdown("""
@@ -1015,10 +865,6 @@ if _google_ok:
         </span>
     </div>
     """, unsafe_allow_html=True)
-
-    # ── Load persistent data from Sheets (only once per session) ──────────
-    load_data_from_sheets()
-
 else:
     st.markdown("""
     <div style='display:inline-flex;align-items:center;gap:8px;margin-bottom:0.8rem;
@@ -1026,7 +872,7 @@ else:
                 border-radius:8px;padding:6px 14px;'>
         <span style='color:#c8a84b'>●</span>
         <span style='color:#c8a84b;font-size:0.78rem;font-weight:600'>
-            Mode Offline — data disimpan lokal sesi ini saja
+            ⚠️ Service Account belum dikonfigurasi — tambahkan [gcp_service_account] di Secrets
         </span>
     </div>
     """, unsafe_allow_html=True)
