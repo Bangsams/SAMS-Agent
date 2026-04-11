@@ -24,17 +24,10 @@ token_uri = "https://oauth2.googleapis.com/token"
 auth_provider_x509_cert_url = "https://www.googleapis.com/oauth2/v1/certs"
 client_x509_cert_url = "https://www.googleapis.com/robot/v1/metadata/x509/sams-agent-823%40sams-agent-493004.iam.gserviceaccount.com"
 [google_calendar]
-calendar_id = "your-email@gmail.com"   ← ID kalender Google Anda (biasanya email)
+calendar_id = "your-email@gmail.com"
 timezone    = "Asia/Jakarta"
 
 ─────────────────────────────────────────────────
-Langkah Setup:
-  1. Buat Google Service Account di console.cloud.google.com
-  2. Aktifkan Google Sheets API + Google Drive API + Google Calendar API
-  3. Paste nilai dari JSON key ke [gcp_service_account] di secrets.toml
-  4. Share spreadsheet ke client_email dengan role Editor
-  5. Share Google Calendar ke client_email dengan role "Make changes to events"
-  6. Salin Spreadsheet ID dari URL spreadsheet
 """
 
 import streamlit as st
@@ -73,7 +66,6 @@ html, body, [data-testid="stApp"] {
 
 .main .block-container { padding-top: 1.5rem !important; max-width: 1100px !important; }
 
-/* ─ Cards ─ */
 .card {
     background: rgba(26,58,42,0.55);
     border: 1px solid rgba(74,140,92,0.25);
@@ -91,7 +83,6 @@ html, body, [data-testid="stApp"] {
     display: flex; align-items: center; gap: .5rem;
 }
 
-/* ─ Inputs ─ */
 [data-testid="stTextInput"] > div > div,
 [data-testid="stNumberInput"] > div > div,
 [data-testid="stDateInput"] > div > div,
@@ -100,7 +91,6 @@ html, body, [data-testid="stApp"] {
     border: 1.5px solid rgba(122,184,146,0.4) !important;
     border-radius: var(--radius-sm) !important;
 }
-/* Warna teks input — kontras di dark & light mode */
 [data-testid="stTextInput"] input,
 [data-testid="stNumberInput"] input,
 [data-testid="stDateInput"] input,
@@ -118,29 +108,24 @@ html, body, [data-testid="stApp"] {
     color: rgba(168,213,181,0.5) !important;
     -webkit-text-fill-color: rgba(168,213,181,0.5) !important;
 }
-/* Selectbox teks */
 [data-testid="stSelectbox"] > div > div > div,
 [data-testid="stSelectbox"] span {
     color: #e8f5ec !important;
     -webkit-text-fill-color: #e8f5ec !important;
 }
-/* DateInput teks */
 [data-testid="stDateInput"] input {
     color: #e8f5ec !important;
     -webkit-text-fill-color: #e8f5ec !important;
 }
-/* Label semua input */
 [data-testid="stTextInput"] label,
 [data-testid="stNumberInput"] label,
 [data-testid="stDateInput"] label,
 [data-testid="stSelectbox"] label { color: var(--sage) !important; font-weight: 600 !important; font-size: 0.8rem !important; }
-/* Pastikan background wrapper tidak override warna teks */
 [data-testid="stTextInput"] > div > div > div,
 [data-testid="stNumberInput"] > div > div > div {
     background: transparent !important;
 }
 
-/* ─ Buttons ─ */
 [data-testid="stButton"] button {
     font-family: 'Plus Jakarta Sans', sans-serif !important;
     font-weight: 700 !important;
@@ -160,7 +145,6 @@ html, body, [data-testid="stApp"] {
     border: 1px solid rgba(74,140,92,0.3) !important;
 }
 
-/* ─ Metrics ─ */
 [data-testid="metric-container"] {
     background: rgba(26,58,42,0.5) !important;
     border: 1px solid rgba(74,140,92,0.2) !important;
@@ -170,7 +154,6 @@ html, body, [data-testid="stApp"] {
 [data-testid="metric-container"] label { color: var(--sage) !important; font-size: .75rem !important; }
 [data-testid="stMetricValue"] { color: var(--mint) !important; font-weight: 700 !important; }
 
-/* ─ Chat bubbles ─ */
 .msg-user { background:rgba(45,90,61,.4);border:1px solid rgba(74,140,92,.3);
     border-radius:10px 0 10px 10px;padding:.7rem 1rem;margin:.4rem 0 .4rem 3rem;font-size:.87rem; }
 .msg-ai { background:rgba(12,32,20,.65);border:1px solid rgba(122,184,146,.2);
@@ -179,7 +162,6 @@ html, body, [data-testid="stApp"] {
 
 .divider { border:none;border-top:1px solid rgba(74,140,92,0.18);margin:.8rem 0; }
 
-/* status pill */
 .pill {
     display:inline-flex;align-items:center;gap:6px;
     padding:3px 11px;border-radius:20px;font-size:.72rem;font-weight:600;letter-spacing:.4px;
@@ -207,7 +189,7 @@ def get_secret(key: str, default=None):
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# SECTION 2 — GOOGLE SHEETS CLIENT (gspread, lebih simpel dari googleapiclient)
+# SECTION 2 — GOOGLE SHEETS CLIENT
 # ══════════════════════════════════════════════════════════════════════════════
 
 SHEET_TAB = "Finance"
@@ -296,8 +278,6 @@ def sheet_status() -> tuple[bool, str]:
     return (ws is not None), msg
 
 
-# ── READ ALL ──────────────────────────────────────────────────────────────────
-
 def load_finance_from_sheet() -> list[dict]:
     ws, _ = get_worksheet()
     if ws is None:
@@ -322,8 +302,6 @@ def load_finance_from_sheet() -> list[dict]:
         return []
 
 
-# ── APPEND ONE ROW ────────────────────────────────────────────────────────────
-
 def append_finance_to_sheet(entry: dict) -> tuple[bool, str]:
     ws, msg = get_worksheet()
     if ws is None:
@@ -343,8 +321,6 @@ def append_finance_to_sheet(entry: dict) -> tuple[bool, str]:
         return False, f"❌ Gagal menyimpan: {e}"
 
 
-# ── DELETE ROW BY INDEX ───────────────────────────────────────────────────────
-
 def delete_finance_row(sheet_row_index: int) -> tuple[bool, str]:
     ws, msg = get_worksheet()
     if ws is None:
@@ -357,14 +333,42 @@ def delete_finance_row(sheet_row_index: int) -> tuple[bool, str]:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# SECTION 3 — AI (OpenAI)
+# SECTION 3 — AI (OpenAI) — PERBAIKAN 401
 # ══════════════════════════════════════════════════════════════════════════════
+#
+# ROOT CAUSE error 401:
+#   st.secrets["OPENAI_API_KEY"] kadang mengembalikan objek AttrDict, bukan
+#   string murni — sehingga OpenAI client menerima tipe yang salah dan
+#   server menolaknya dengan 401 Unauthorized.
+#
+# FIX: Paksa konversi ke str() dan strip(), lalu validasi prefix "sk-".
+#      Jika key tidak valid, tampilkan pesan yang jelas (bukan error 401 mentah).
+# ═══════════════════════════════════════════════════════════════════════════════
 
 MAX_BUDGET_USD = 0.05
 
+def get_openai_api_key() -> str:
+    """Ambil OpenAI API key dan pastikan berupa string bersih."""
+    # Coba dari st.secrets langsung
+    try:
+        raw = st.secrets["OPENAI_API_KEY"]
+        key = str(raw).strip()
+        if key:
+            return key
+    except Exception:
+        pass
+    # Fallback ke environment variable
+    key = os.getenv("OPENAI_API_KEY", "").strip()
+    return key
+
 def get_openai_client():
     from openai import OpenAI
-    return OpenAI(api_key=get_secret("OPENAI_API_KEY"))
+    key = get_openai_api_key()
+    if not key:
+        raise ValueError("OPENAI_API_KEY tidak ditemukan di Secrets maupun environment.")
+    if not key.startswith("sk-"):
+        raise ValueError(f"OPENAI_API_KEY tidak valid (harus diawali 'sk-'). Nilai saat ini: '{key[:8]}...'")
+    return OpenAI(api_key=key)
 
 def tokens_to_usd(tokens: int) -> float:
     return tokens * 0.0000005   # gpt-4o-mini ~$0.50/1M input tokens
@@ -409,11 +413,23 @@ def call_ai(messages: list) -> str:
         used = resp.usage.total_tokens if resp.usage else 200
         st.session_state["total_tokens"] = st.session_state.get("total_tokens", 0) + used
         return resp.choices[0].message.content
+    except ValueError as e:
+        # Key tidak valid — tampilkan pesan yang actionable
+        return f"⚠️ Konfigurasi API Key bermasalah: {e}\n\nSolusi: Pastikan `OPENAI_API_KEY` sudah diisi dengan benar di **Settings → Secrets** Streamlit Cloud."
     except Exception as e:
+        err_str = str(e)
+        if "401" in err_str or "Unauthorized" in err_str or "invalid_api_key" in err_str.lower():
+            return (
+                "⚠️ **OpenAI API Key tidak valid (Error 401)**\n\n"
+                "Kemungkinan penyebab:\n"
+                "1. Key salah atau sudah kedaluwarsa\n"
+                "2. Key belum diisi di Streamlit Secrets\n"
+                "3. Ada spasi/karakter tersembunyi di key\n\n"
+                "**Solusi:** Buka [platform.openai.com/api-keys](https://platform.openai.com/api-keys) → buat key baru → paste ke Secrets."
+            )
         return f"❌ Error AI: {e}"
 
 
-# ── PERBAIKAN: escape kurung kurawal literal di contoh JSON ──────────────────
 SYSTEM_TODO = """Kamu adalah SAMS Todo Agent, asisten jadwal cerdas berbahasa Indonesia.
 Tugasmu: ekstrak informasi kegiatan dari pesan user dan simpan ke Google Calendar.
 
@@ -461,7 +477,16 @@ def call_ai_todo(messages: list) -> str:
         used = resp.usage.total_tokens if resp.usage else 200
         st.session_state["total_tokens"] = st.session_state.get("total_tokens", 0) + used
         return resp.choices[0].message.content
+    except ValueError as e:
+        return f"⚠️ Konfigurasi API Key bermasalah: {e}"
     except Exception as e:
+        err_str = str(e)
+        if "401" in err_str or "Unauthorized" in err_str or "invalid_api_key" in err_str.lower():
+            return (
+                "⚠️ **OpenAI API Key tidak valid (Error 401)**\n\n"
+                "Buka [platform.openai.com/api-keys](https://platform.openai.com/api-keys) → "
+                "buat key baru → paste ke Streamlit Secrets sebagai `OPENAI_API_KEY`."
+            )
         return f"❌ Error AI: {e}"
 
 
@@ -483,7 +508,6 @@ def get_calendar_timezone() -> str:
 
 @st.cache_resource(show_spinner=False)
 def get_calendar_service():
-    """Buat Google Calendar service dari credentials yang sama."""
     try:
         from google.oauth2.service_account import Credentials
         from googleapiclient.discovery import build
@@ -547,7 +571,6 @@ def add_google_calendar_event(title: str, date_str: str, start_time: str,
 
 
 def load_upcoming_events(max_results: int = 20) -> list[dict]:
-    """Muat event mendatang dari Google Calendar."""
     svc, err = get_calendar_service()
     if svc is None:
         return []
@@ -582,7 +605,6 @@ def load_upcoming_events(max_results: int = 20) -> list[dict]:
 
 
 def delete_calendar_event(event_id: str) -> tuple[bool, str]:
-    """Hapus event dari Google Calendar berdasarkan ID."""
     svc, err = get_calendar_service()
     if svc is None:
         return False, f"❌ {err}"
@@ -607,7 +629,6 @@ def init_state():
         "sheet_loaded":       False,
         "show_analytics":     False,
         "delete_confirm_idx": None,
-        # Todo Agent
         "todo_messages":      [],
         "todo_events_cache":  [],
         "todo_cache_loaded":  False,
@@ -620,7 +641,7 @@ init_state()
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# SECTION 5 — LOAD DATA (sekali per session)
+# SECTION 5 — LOAD DATA
 # ══════════════════════════════════════════════════════════════════════════════
 
 if not st.session_state["sheet_loaded"]:
@@ -635,7 +656,6 @@ if not st.session_state["sheet_loaded"]:
 # SECTION 6 — UI
 # ══════════════════════════════════════════════════════════════════════════════
 
-# ── HEADER ────────────────────────────────────────────────────────────────────
 st.markdown("""
 <div style='text-align:center;padding:1.5rem 0 1rem;'>
   <div style='font-family:"Playfair Display",serif;font-size:2.8rem;font-weight:700;
@@ -651,7 +671,8 @@ st.markdown("""
 
 # ── STATUS STRIP ──────────────────────────────────────────────────────────────
 gs_ok, gs_msg = sheet_status()
-openai_ok = bool(get_secret("OPENAI_API_KEY"))
+openai_key    = get_openai_api_key()
+openai_ok     = bool(openai_key and openai_key.startswith("sk-"))
 
 used_usd = tokens_to_usd(st.session_state["total_tokens"])
 pct = min(100, int(used_usd / MAX_BUDGET_USD * 100))
@@ -679,49 +700,60 @@ with col_s3:
     </div>
     """, unsafe_allow_html=True)
 
+# Tampilkan warning jika key tidak valid agar user tahu sebelum chat
+if not openai_ok:
+    st.warning(
+        "⚠️ **OPENAI_API_KEY belum dikonfigurasi atau tidak valid.**\n\n"
+        "Buka **Settings → Secrets** di Streamlit Cloud dan tambahkan:\n"
+        "```\nOPENAI_API_KEY = \"sk-proj-...\"\n```\n"
+        "Dapatkan key baru di [platform.openai.com/api-keys](https://platform.openai.com/api-keys)"
+    )
+
 st.markdown("<div style='height:.8rem'></div>", unsafe_allow_html=True)
 
 # ── KONFIGURASI SIDEBAR ───────────────────────────────────────────────────────
 with st.sidebar:
     st.markdown("## ⚙️ Konfigurasi")
     st.markdown("---")
-    st.markdown("""
-**Langkah Setup Google Sheets:**
 
-1. Buka [Google Cloud Console](https://console.cloud.google.com)
-2. Buat/pilih project → **APIs & Services**
-3. Aktifkan **Google Sheets API** dan **Google Drive API**
-4. Buat **Service Account** → buat JSON key
-5. Share spreadsheet Anda ke `client_email` service account (role: **Editor**)
-6. Isi `.streamlit/secrets.toml`:
+    # Debug key status
+    raw_key = get_openai_api_key()
+    if raw_key:
+        masked = raw_key[:7] + "..." + raw_key[-4:] if len(raw_key) > 11 else "***"
+        if raw_key.startswith("sk-"):
+            st.success(f"✅ API Key terdeteksi: `{masked}`")
+        else:
+            st.error(f"❌ Key tidak valid (tidak diawali 'sk-'): `{masked}`")
+    else:
+        st.error("❌ OPENAI_API_KEY tidak ditemukan")
+
+    st.markdown("---")
+    st.markdown("""
+**Setup secrets.toml:**
 """)
     st.code("""
 OPENAI_API_KEY = "sk-proj-..."
-GOOGLE_SHEET_ID = "14OjkRWpi982pWYFGv7FPNHPxlipVvloRapZqGDTDq1I"
+GOOGLE_SHEET_ID = "..."
 
 [google_sheets]
 sheet_name = "Finance"
 
 [google_calendar]
-calendar_id = "lololzolzol@gmail.com"
+calendar_id = "email@gmail.com"
 timezone    = "Asia/Jakarta"
 
 [gcp_service_account]
 type = "service_account"
-project_id = "sams-agent-493004"
-private_key_id = "2bdfcbfc..."
-private_key = "-----BEGIN PRIVATE KEY-----\\nMIIEv...\\n-----END PRIVATE KEY-----\\n"
-client_email = "sams-agent-823@sams-agent-493004.iam.gserviceaccount.com"
-client_id = "108076406772411899465"
+project_id = "..."
+private_key_id = "..."
+private_key = "-----BEGIN PRIVATE KEY-----\\n...\\n-----END PRIVATE KEY-----\\n"
+client_email = "...@....iam.gserviceaccount.com"
+client_id = "..."
 auth_uri = "https://accounts.google.com/o/oauth2/auth"
 token_uri = "https://oauth2.googleapis.com/token"
 auth_provider_x509_cert_url = "https://www.googleapis.com/oauth2/v1/certs"
-client_x509_cert_url = "https://www.googleapis.com/robot/v1/metadata/x509/sams-agent-823%40sams-agent-493004.iam.gserviceaccount.com"
+client_x509_cert_url = "..."
 """, language="toml")
-    st.markdown("---")
-    st.markdown("**Sheet ID** ada di URL Spreadsheet:")
-    st.markdown("`docs.google.com/spreadsheets/d/**[SHEET_ID]**/edit`")
-
     st.markdown("---")
     if st.button("🔄 Reload Data dari Sheets", use_container_width=True):
         st.session_state["sheet_loaded"] = False
@@ -752,7 +784,7 @@ tab_todo, tab_catat, tab_riwayat, tab_chat = st.tabs(
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# TAB 0 — TODO TASK AGENT (Google Calendar)
+# TAB 0 — TODO TASK AGENT
 # ══════════════════════════════════════════════════════════════════════════════
 with tab_todo:
 
@@ -777,15 +809,13 @@ with tab_todo:
     """, unsafe_allow_html=True)
 
     if not cal_ok:
-        st.warning(f"⚠️ Google Calendar belum terhubung: {cal_err}. Aktifkan **Google Calendar API** dan share kalender ke service account. Tambahkan `[google_calendar]` di Secrets.")
+        st.warning(f"⚠️ Google Calendar belum terhubung: {cal_err}.")
 
-    # ── Load upcoming events (cache per session) ──────────────────────────────
     if not st.session_state["todo_cache_loaded"]:
         with st.spinner("📅 Memuat agenda dari Google Calendar…"):
             st.session_state["todo_events_cache"] = load_upcoming_events(20)
         st.session_state["todo_cache_loaded"] = True
 
-    # ── UPCOMING EVENTS DISPLAY ───────────────────────────────────────────────
     events_cache = st.session_state["todo_events_cache"]
     if events_cache:
         st.markdown("<div class='card-title' style='font-size:.9rem;margin-bottom:.5rem'>📋 Agenda Mendatang</div>",
@@ -821,7 +851,7 @@ with tab_todo:
                 except Exception:
                     time_str = ""
 
-                loc_html = f"<span style='color:#7ab892;font-size:.7rem;'>📍 {ev['location']}</span>" if ev.get("location") else ""
+                loc_html  = f"<span style='color:#7ab892;font-size:.7rem;'>📍 {ev['location']}</span>" if ev.get("location") else ""
                 link_html = f"<a href='{ev['link']}' target='_blank' style='color:#7ab892;font-size:.7rem;text-decoration:none;'>🔗 Buka</a>" if ev.get("link") else ""
 
                 st.markdown(f"""
@@ -843,7 +873,6 @@ with tab_todo:
 
     st.markdown("<hr class='divider'>", unsafe_allow_html=True)
 
-    # ── CHAT AI TODO ──────────────────────────────────────────────────────────
     st.markdown("<div class='card-title' style='font-size:.9rem'>💬 Ceritakan Kegiatan Anda</div>",
                 unsafe_allow_html=True)
 
@@ -925,7 +954,6 @@ with tab_todo:
 
     st.markdown("<hr class='divider'>", unsafe_allow_html=True)
 
-    # ── FORM MANUAL ───────────────────────────────────────────────────────────
     st.markdown("<div class='card-title' style='font-size:.9rem'>📝 Tambah Agenda Manual</div>",
                 unsafe_allow_html=True)
     st.markdown("<p style='color:#7ab892;font-size:.8rem;margin-bottom:.7rem'>Isi form berikut untuk menambahkan agenda langsung tanpa AI.</p>",
@@ -974,7 +1002,6 @@ with tab_todo:
             else:
                 st.error(cal_msg)
 
-    # ── HAPUS EVENT ───────────────────────────────────────────────────────────
     if events_cache:
         st.markdown("<hr class='divider'>", unsafe_allow_html=True)
         with st.expander("🗑️ Hapus Event dari Calendar", expanded=False):
@@ -1002,7 +1029,6 @@ with tab_catat:
     entries = st.session_state["finance_entries"]
     df_all = pd.DataFrame(entries) if entries else pd.DataFrame(columns=["date","description","type","amount","ts"])
 
-    # ── METRICS ──────────────────────────────────────────────────────────────
     if not df_all.empty:
         df_all["amount"] = pd.to_numeric(df_all["amount"], errors="coerce").fillna(0)
         df_all["date_dt"] = pd.to_datetime(df_all["date"], errors="coerce")
@@ -1026,7 +1052,6 @@ with tab_catat:
 
         st.markdown("<hr class='divider'>", unsafe_allow_html=True)
 
-    # ── FORM CATAT TRANSAKSI ──────────────────────────────────────────────────
     st.markdown("<div class='card-title'>➕ Tambah Transaksi Baru</div>", unsafe_allow_html=True)
     st.markdown(
         "<p style='color:#7ab892;font-size:.82rem;margin-bottom:.8rem'>"
@@ -1074,7 +1099,6 @@ with tab_catat:
 
             st.rerun()
 
-    # ── TRANSAKSI TERBARU (preview 5) ────────────────────────────────────────
     if entries:
         st.markdown("<hr class='divider'>", unsafe_allow_html=True)
         st.markdown("<div class='card-title' style='font-size:.9rem'>🕒 5 Transaksi Terbaru</div>",
@@ -1113,7 +1137,6 @@ with tab_riwayat:
         df["amount"] = pd.to_numeric(df["amount"], errors="coerce").fillna(0)
         df["date_dt"] = pd.to_datetime(df["date"], errors="coerce")
 
-        # ── FILTER ────────────────────────────────────────────────────────────
         col_f1, col_f2, col_f3 = st.columns(3)
         with col_f1:
             filter_type = st.selectbox("Filter Jenis", ["Semua", "pengeluaran", "pemasukan"], key="filter_type")
@@ -1133,7 +1156,6 @@ with tab_riwayat:
         if max_rows != "Semua":
             df_show = df_show.head(int(max_rows))
 
-        # ── TABEL ─────────────────────────────────────────────────────────────
         st.markdown(f"<div class='card-title' style='font-size:.9rem'>📋 Riwayat Transaksi ({total_filtered} data)</div>",
                     unsafe_allow_html=True)
 
@@ -1142,7 +1164,6 @@ with tab_riwayat:
         display.columns = ["Tanggal","Keterangan","Jenis","Jumlah","Waktu Input"]
         st.dataframe(display.reset_index(drop=True), use_container_width=True, hide_index=True)
 
-        # ── HAPUS TRANSAKSI ───────────────────────────────────────────────────
         st.markdown("<hr class='divider'>", unsafe_allow_html=True)
         with st.expander("🗑️ Hapus Transaksi", expanded=False):
             st.markdown("<p style='color:#e08888;font-size:.82rem'>⚠️ Hapus data dari Google Sheets secara permanen.</p>", unsafe_allow_html=True)
@@ -1162,7 +1183,6 @@ with tab_riwayat:
                 else:
                     st.error(msg)
 
-        # ── CHART ─────────────────────────────────────────────────────────────
         st.markdown("<hr class='divider'>", unsafe_allow_html=True)
         st.markdown("<div class='card-title' style='font-size:.9rem'>📈 Visualisasi</div>", unsafe_allow_html=True)
 
@@ -1213,7 +1233,6 @@ with tab_riwayat:
         except Exception as e:
             st.warning(f"Chart error: {e}")
 
-        # ── EXPORT CSV ────────────────────────────────────────────────────────
         st.markdown("<hr class='divider'>", unsafe_allow_html=True)
         csv_data = df[["date","description","type","amount","ts"]].to_csv(index=False).encode("utf-8")
         st.download_button(
