@@ -95,17 +95,45 @@ html, body, [data-testid="stApp"] {
     border: 1.5px solid rgba(122,184,146,0.4) !important;
     border-radius: var(--radius-sm) !important;
 }
+/* Warna teks input — kontras di dark & light mode */
 [data-testid="stTextInput"] input,
 [data-testid="stNumberInput"] input,
-[data-testid="stDateInput"] input {
+[data-testid="stDateInput"] input,
+[data-testid="stTextInput"] input::placeholder,
+[data-testid="stNumberInput"] input::placeholder {
     background: transparent !important;
     color: #e8f5ec !important;
+    -webkit-text-fill-color: #e8f5ec !important;
+    caret-color: #a8d5b5 !important;
     font-family: 'Plus Jakarta Sans', sans-serif !important;
+    opacity: 1 !important;
 }
+[data-testid="stTextInput"] input::placeholder,
+[data-testid="stNumberInput"] input::placeholder {
+    color: rgba(168,213,181,0.5) !important;
+    -webkit-text-fill-color: rgba(168,213,181,0.5) !important;
+}
+/* Selectbox teks */
+[data-testid="stSelectbox"] > div > div > div,
+[data-testid="stSelectbox"] span {
+    color: #e8f5ec !important;
+    -webkit-text-fill-color: #e8f5ec !important;
+}
+/* DateInput teks */
+[data-testid="stDateInput"] input {
+    color: #e8f5ec !important;
+    -webkit-text-fill-color: #e8f5ec !important;
+}
+/* Label semua input */
 [data-testid="stTextInput"] label,
 [data-testid="stNumberInput"] label,
 [data-testid="stDateInput"] label,
 [data-testid="stSelectbox"] label { color: var(--sage) !important; font-weight: 600 !important; font-size: 0.8rem !important; }
+/* Pastikan background wrapper tidak override warna teks */
+[data-testid="stTextInput"] > div > div > div,
+[data-testid="stNumberInput"] > div > div > div {
+    background: transparent !important;
+}
 
 /* ─ Buttons ─ */
 [data-testid="stButton"] button {
