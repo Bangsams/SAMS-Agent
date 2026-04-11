@@ -5,25 +5,31 @@ Persyaratan:
   pip install streamlit openai gspread google-auth pandas plotly
 
 Konfigurasi Streamlit Secrets (.streamlit/secrets.toml):
-  OPENAI_API_KEY = "sk-..."
-  GOOGLE_SHEET_ID = "1AbCdEfGhIjKlMnOpQrStUvWxYz..."   ← ID spreadsheet Anda
+─────────────────────────────────────────────────
+OPENAI_API_KEY = "sk-proj-..."
+GOOGLE_SHEET_ID = "14OjkRWpi982pWYFGv7FPNHPxlipVvloRapZqGDTDq1I"
 
-  [gcp_service_account]
-  type                        = "service_account"
-  project_id                  = "your-project"
-  private_key_id              = "abc123"
-  private_key                 = "-----BEGIN RSA PRIVATE KEY-----\\nMIIE...\\n-----END RSA PRIVATE KEY-----\\n"
-  client_email                = "sams-agent@your-project.iam.gserviceaccount.com"
-  client_id                   = "123456789"
-  token_uri                   = "https://oauth2.googleapis.com/token"
-  client_x509_cert_url        = "https://www.googleapis.com/robot/v1/metadata/x509/sams-agent%40your-project.iam.gserviceaccount.com"
+[google_sheets]
+sheet_name = "Finance"
 
+[gcp_service_account]
+type = "service_account"
+project_id = "sams-agent-493004"
+private_key_id = "2bdfcbfce0afa7025bc7427edffbae86b72daf2f"
+private_key = "-----BEGIN PRIVATE KEY-----\nMIIEv...\n-----END PRIVATE KEY-----\n"
+client_email = "sams-agent-823@sams-agent-493004.iam.gserviceaccount.com"
+client_id = "108076406772411899465"
+auth_uri = "https://accounts.google.com/o/oauth2/auth"
+token_uri = "https://oauth2.googleapis.com/token"
+auth_provider_x509_cert_url = "https://www.googleapis.com/oauth2/v1/certs"
+client_x509_cert_url = "https://www.googleapis.com/robot/v1/metadata/x509/sams-agent-823%40sams-agent-493004.iam.gserviceaccount.com"
+─────────────────────────────────────────────────
 Langkah Setup:
   1. Buat Google Service Account di console.cloud.google.com
   2. Aktifkan Google Sheets API + Google Drive API
-  3. Download JSON key → isi nilai-nilainya ke secrets.toml
-  4. Share spreadsheet Anda ke email service account (client_email) dengan role Editor
-  5. Salin Spreadsheet ID dari URL: docs.google.com/spreadsheets/d/[INI SHEET ID]/edit
+  3. Paste nilai dari JSON key ke [gcp_service_account] di secrets.toml
+  4. Share spreadsheet ke client_email dengan role Editor
+  5. Salin Spreadsheet ID dari URL spreadsheet
 """
 
 import streamlit as st
@@ -178,6 +184,7 @@ SHEET_HEADERS = ["Tanggal", "Keterangan", "Jenis", "Jumlah (Rp)", "Timestamp Inp
 def get_gspread_client():
     """
     Buat gspread client dari Service Account di Streamlit Secrets.
+    Mendukung format [gcp_service_account] dengan semua field lengkap dari JSON key.
     Di-cache agar tidak reconnect setiap rerun.
     """
     try:
@@ -185,26 +192,53 @@ def get_gspread_client():
         from google.oauth2.service_account import Credentials
 
         sa = st.secrets["gcp_service_account"]
+
+        # Bangun dict lengkap — semua field dari JSON service account key
         info = {
-            "type": "service_account",
-            "project_id": str(sa["project_id"]),
-            "private_key_id": str(sa["private_key_id"]),
-            "private_key": str(sa["private_key"]).replace("\\n", "\n"),
-            "client_email": str(sa["client_email"]),
-            "client_id": str(sa["client_id"]),
-            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-            "token_uri": str(sa.get("token_uri", "https://oauth2.googleapis.com/token")),
-            "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-            "client_x509_cert_url": str(sa.get("client_x509_cert_url", "")),
+            "type":                        str(sa.get("type", "service_account")),
+            "project_id":                  str(sa["project_id"]),
+            "private_key_id":              str(sa["private_key_id"]),
+            # Normalisasi \n literal (dari TOML single-quote) jadi newline asli
+            "private_key":                 str(sa["private_key"]).replace("\\n", "\n"),
+            "client_email":                str(sa["client_email"]),
+            "client_id":                   str(sa["client_id"]),
+            "auth_uri":                    str(sa.get("auth_uri",
+                                               "https://accounts.google.com/o/oauth2/auth")),
+            "token_uri":                   str(sa.get("token_uri",
+                                               "https://oauth2.googleapis.com/token")),
+            "auth_provider_x509_cert_url": str(sa.get("auth_provider_x509_cert_url",
+                                               "https://www.googleapis.com/oauth2/v1/certs")),
+            "client_x509_cert_url":        str(sa.get("client_x509_cert_url", "")),
+            "universe_domain":             str(sa.get("universe_domain", "googleapis.com")),
         }
+
         scopes = [
             "https://www.googleapis.com/auth/spreadsheets",
             "https://www.googleapis.com/auth/drive",
         ]
         creds = Credentials.from_service_account_info(info, scopes=scopes)
         return gspread.authorize(creds)
-    except Exception as e:
+    except KeyError as e:
+        st.error(f"❌ Field tidak ditemukan di [gcp_service_account]: {e}")
         return None
+    except Exception as e:
+        st.error(f"❌ Gagal membuat koneksi Google: {e}")
+        return None
+
+
+def get_sheet_tab_name() -> str:
+    """
+    Baca nama tab sheet dari [google_sheets] secrets jika ada.
+    Fallback ke SHEET_TAB default ('Finance').
+    Contoh secrets.toml:
+        [google_sheets]
+        sheet_name = "Finance"
+    """
+    try:
+        name = str(st.secrets["google_sheets"]["sheet_name"])
+        return name if name.strip() else SHEET_TAB
+    except Exception:
+        return SHEET_TAB
 
 
 @st.cache_resource(show_spinner=False)
@@ -223,14 +257,17 @@ def get_worksheet():
     except Exception as e:
         return None, f"❌ Tidak bisa membuka spreadsheet: {e}"
 
-    # Cek/buat tab Finance
+    # Nama tab dibaca dari [google_sheets] secrets, fallback ke SHEET_TAB
+    tab_name = get_sheet_tab_name()
+
+    # Cek/buat tab
     try:
-        ws = spreadsheet.worksheet(SHEET_TAB)
+        ws = spreadsheet.worksheet(tab_name)
     except Exception:
-        ws = spreadsheet.add_worksheet(title=SHEET_TAB, rows=1000, cols=10)
+        ws = spreadsheet.add_worksheet(title=tab_name, rows=1000, cols=10)
         ws.append_row(SHEET_HEADERS, value_input_option="USER_ENTERED")
 
-    # Pastikan header ada
+    # Pastikan header ada di baris pertama
     try:
         first_row = ws.row_values(1)
         if first_row != SHEET_HEADERS:
@@ -238,7 +275,7 @@ def get_worksheet():
     except Exception:
         pass
 
-    return ws, "✅ Terhubung ke Google Sheets"
+    return ws, f"✅ Terhubung ke Google Sheets (tab: {tab_name})"
 
 
 def sheet_status() -> tuple[bool, str]:
@@ -473,17 +510,23 @@ with st.sidebar:
 6. Isi `.streamlit/secrets.toml`:
 """)
     st.code("""
-OPENAI_API_KEY = "sk-..."
-GOOGLE_SHEET_ID = "1AbCd..."
+OPENAI_API_KEY = "sk-proj-..."
+GOOGLE_SHEET_ID = "14OjkRWpi982pWYFGv7FPNHPxlipVvloRapZqGDTDq1I"
+
+[google_sheets]
+sheet_name = "Finance"
 
 [gcp_service_account]
 type = "service_account"
-project_id = "my-project"
-private_key_id = "abc123"
-private_key = "-----BEGIN RSA PRIVATE KEY-----\\nMIIE...\\n-----END RSA PRIVATE KEY-----\\n"
-client_email = "sams@my-project.iam.gserviceaccount.com"
-client_id = "123456789"
+project_id = "sams-agent-493004"
+private_key_id = "2bdfcbfc..."
+private_key = "-----BEGIN PRIVATE KEY-----\\nMIIEv...\\n-----END PRIVATE KEY-----\\n"
+client_email = "sams-agent-823@sams-agent-493004.iam.gserviceaccount.com"
+client_id = "108076406772411899465"
+auth_uri = "https://accounts.google.com/o/oauth2/auth"
 token_uri = "https://oauth2.googleapis.com/token"
+auth_provider_x509_cert_url = "https://www.googleapis.com/oauth2/v1/certs"
+client_x509_cert_url = "https://www.googleapis.com/robot/v1/metadata/x509/sams-agent-823%40sams-agent-493004.iam.gserviceaccount.com"
 """, language="toml")
     st.markdown("---")
     st.markdown("**Sheet ID** ada di URL Spreadsheet:")
