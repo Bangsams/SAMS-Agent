@@ -5,29 +5,15 @@ Persyaratan:
   pip install streamlit openai gspread google-auth pandas plotly
 
 Konfigurasi Streamlit Secrets (.streamlit/secrets.toml):
-─────────────────────────────────────────────────
 OPENAI_API_KEY = "sk-proj-..."
-GOOGLE_SHEET_ID = "14OjkRWpi982pWYFGv7FPNHPxlipVvloRapZqGDTDq1I"
-
+GOOGLE_SHEET_ID = "..."
 [google_sheets]
 sheet_name = "Finance"
-
-[gcp_service_account]
-type = "service_account"
-project_id = "sams-agent-493004"
-private_key_id = "2bdfcbfce0afa7025bc7427edffbae86b72daf2f"
-private_key = "-----BEGIN PRIVATE KEY-----\nMIIEv...\n-----END PRIVATE KEY-----\n"
-client_email = "sams-agent-823@sams-agent-493004.iam.gserviceaccount.com"
-client_id = "108076406772411899465"
-auth_uri = "https://accounts.google.com/o/oauth2/auth"
-token_uri = "https://oauth2.googleapis.com/token"
-auth_provider_x509_cert_url = "https://www.googleapis.com/oauth2/v1/certs"
-client_x509_cert_url = "https://www.googleapis.com/robot/v1/metadata/x509/sams-agent-823%40sams-agent-493004.iam.gserviceaccount.com"
 [google_calendar]
 calendar_id = "your-email@gmail.com"
 timezone    = "Asia/Jakarta"
-
-─────────────────────────────────────────────────
+[gcp_service_account]
+...
 """
 
 import streamlit as st
@@ -180,7 +166,6 @@ html, body, [data-testid="stApp"] {
 # ══════════════════════════════════════════════════════════════════════════════
 
 def get_secret(key: str, default=None):
-    """Read from Streamlit secrets first, then env."""
     try:
         val = st.secrets[key]
         return str(val) if val is not None else default
@@ -200,9 +185,7 @@ def get_gspread_client():
     try:
         import gspread
         from google.oauth2.service_account import Credentials
-
         sa = st.secrets["gcp_service_account"]
-
         info = {
             "type":                        str(sa.get("type", "service_account")),
             "project_id":                  str(sa["project_id"]),
@@ -210,16 +193,13 @@ def get_gspread_client():
             "private_key":                 str(sa["private_key"]).replace("\\n", "\n"),
             "client_email":                str(sa["client_email"]),
             "client_id":                   str(sa["client_id"]),
-            "auth_uri":                    str(sa.get("auth_uri",
-                                               "https://accounts.google.com/o/oauth2/auth")),
-            "token_uri":                   str(sa.get("token_uri",
-                                               "https://oauth2.googleapis.com/token")),
+            "auth_uri":                    str(sa.get("auth_uri", "https://accounts.google.com/o/oauth2/auth")),
+            "token_uri":                   str(sa.get("token_uri", "https://oauth2.googleapis.com/token")),
             "auth_provider_x509_cert_url": str(sa.get("auth_provider_x509_cert_url",
                                                "https://www.googleapis.com/oauth2/v1/certs")),
             "client_x509_cert_url":        str(sa.get("client_x509_cert_url", "")),
             "universe_domain":             str(sa.get("universe_domain", "googleapis.com")),
         }
-
         scopes = [
             "https://www.googleapis.com/auth/spreadsheets",
             "https://www.googleapis.com/auth/drive",
@@ -228,10 +208,10 @@ def get_gspread_client():
         creds = Credentials.from_service_account_info(info, scopes=scopes)
         return gspread.authorize(creds)
     except KeyError as e:
-        st.error(f"❌ Field tidak ditemukan di [gcp_service_account]: {e}")
+        st.error(f"Field tidak ditemukan di [gcp_service_account]: {e}")
         return None
     except Exception as e:
-        st.error(f"❌ Gagal membuat koneksi Google: {e}")
+        st.error(f"Gagal membuat koneksi Google: {e}")
         return None
 
 
@@ -248,29 +228,24 @@ def get_worksheet():
     gc = get_gspread_client()
     sheet_id = get_secret("GOOGLE_SHEET_ID")
     if not gc or not sheet_id:
-        return None, "❌ Konfigurasi belum lengkap (lihat sidebar)."
-
+        return None, "Konfigurasi belum lengkap (lihat sidebar)."
     try:
         spreadsheet = gc.open_by_key(sheet_id)
     except Exception as e:
-        return None, f"❌ Tidak bisa membuka spreadsheet: {e}"
-
+        return None, f"Tidak bisa membuka spreadsheet: {e}"
     tab_name = get_sheet_tab_name()
-
     try:
         ws = spreadsheet.worksheet(tab_name)
     except Exception:
         ws = spreadsheet.add_worksheet(title=tab_name, rows=1000, cols=10)
         ws.append_row(SHEET_HEADERS, value_input_option="USER_ENTERED")
-
     try:
         first_row = ws.row_values(1)
         if first_row != SHEET_HEADERS:
             ws.insert_row(SHEET_HEADERS, index=1)
     except Exception:
         pass
-
-    return ws, f"✅ Terhubung ke Google Sheets (tab: {tab_name})"
+    return ws, f"Terhubung ke Google Sheets (tab: {tab_name})"
 
 
 def sheet_status() -> tuple[bool, str]:
@@ -308,17 +283,11 @@ def append_finance_to_sheet(entry: dict) -> tuple[bool, str]:
         return False, msg
     try:
         ts_now = datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-        row = [
-            entry["date"],
-            entry["description"],
-            entry["type"],
-            entry["amount"],
-            ts_now,
-        ]
+        row = [entry["date"], entry["description"], entry["type"], entry["amount"], ts_now]
         ws.append_row(row, value_input_option="USER_ENTERED")
-        return True, "✅ Tersimpan ke Google Sheets"
+        return True, "Tersimpan ke Google Sheets"
     except Exception as e:
-        return False, f"❌ Gagal menyimpan: {e}"
+        return False, f"Gagal menyimpan: {e}"
 
 
 def delete_finance_row(sheet_row_index: int) -> tuple[bool, str]:
@@ -327,29 +296,18 @@ def delete_finance_row(sheet_row_index: int) -> tuple[bool, str]:
         return False, msg
     try:
         ws.delete_rows(sheet_row_index)
-        return True, "✅ Data dihapus dari Google Sheets"
+        return True, "Data dihapus dari Google Sheets"
     except Exception as e:
-        return False, f"❌ Gagal menghapus: {e}"
+        return False, f"Gagal menghapus: {e}"
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# SECTION 3 — AI (OpenAI) — PERBAIKAN 401
+# SECTION 3 — AI (OpenAI)
 # ══════════════════════════════════════════════════════════════════════════════
-#
-# ROOT CAUSE error 401:
-#   st.secrets["OPENAI_API_KEY"] kadang mengembalikan objek AttrDict, bukan
-#   string murni — sehingga OpenAI client menerima tipe yang salah dan
-#   server menolaknya dengan 401 Unauthorized.
-#
-# FIX: Paksa konversi ke str() dan strip(), lalu validasi prefix "sk-".
-#      Jika key tidak valid, tampilkan pesan yang jelas (bukan error 401 mentah).
-# ═══════════════════════════════════════════════════════════════════════════════
 
 MAX_BUDGET_USD = 0.05
 
 def get_openai_api_key() -> str:
-    """Ambil OpenAI API key dan pastikan berupa string bersih."""
-    # Coba dari st.secrets langsung
     try:
         raw = st.secrets["OPENAI_API_KEY"]
         key = str(raw).strip()
@@ -357,9 +315,7 @@ def get_openai_api_key() -> str:
             return key
     except Exception:
         pass
-    # Fallback ke environment variable
-    key = os.getenv("OPENAI_API_KEY", "").strip()
-    return key
+    return os.getenv("OPENAI_API_KEY", "").strip()
 
 def get_openai_client():
     from openai import OpenAI
@@ -371,7 +327,7 @@ def get_openai_client():
     return OpenAI(api_key=key)
 
 def tokens_to_usd(tokens: int) -> float:
-    return tokens * 0.0000005   # gpt-4o-mini ~$0.50/1M input tokens
+    return tokens * 0.0000005
 
 SYSTEM_FINANCE = """Kamu adalah SAMS Finance Agent, asisten keuangan cerdas berbahasa Indonesia.
 Bantu user mencatat pengeluaran dan pemasukan.
@@ -389,19 +345,16 @@ Gunakan format rupiah (Rp X.XXX) saat menyebut angka. Singkat, ramah, profesiona
 
 def call_ai(messages: list) -> str:
     if st.session_state.get("budget_exceeded"):
-        return "⚠️ Budget sesi habis. Refresh halaman untuk memulai sesi baru."
-
+        return "Budget sesi habis. Refresh halaman untuk memulai sesi baru."
     used_usd = tokens_to_usd(st.session_state.get("total_tokens", 0))
     remaining = MAX_BUDGET_USD - used_usd
     if remaining <= 0:
         st.session_state["budget_exceeded"] = True
-        return "⚠️ Budget sesi habis."
-
+        return "Budget sesi habis."
     max_tokens = min(600, int(remaining / 0.0000006))
     if max_tokens < 40:
         st.session_state["budget_exceeded"] = True
-        return "⚠️ Budget hampir habis. Refresh untuk sesi baru."
-
+        return "Budget hampir habis. Refresh untuk sesi baru."
     try:
         client = get_openai_client()
         resp = client.chat.completions.create(
@@ -414,57 +367,182 @@ def call_ai(messages: list) -> str:
         st.session_state["total_tokens"] = st.session_state.get("total_tokens", 0) + used
         return resp.choices[0].message.content
     except ValueError as e:
-        # Key tidak valid — tampilkan pesan yang actionable
-        return f"⚠️ Konfigurasi API Key bermasalah: {e}\n\nSolusi: Pastikan `OPENAI_API_KEY` sudah diisi dengan benar di **Settings → Secrets** Streamlit Cloud."
+        return f"Konfigurasi API Key bermasalah: {e}"
     except Exception as e:
         err_str = str(e)
         if "401" in err_str or "Unauthorized" in err_str or "invalid_api_key" in err_str.lower():
             return (
-                "⚠️ **OpenAI API Key tidak valid (Error 401)**\n\n"
+                "**OpenAI API Key tidak valid (Error 401)**\n\n"
                 "Kemungkinan penyebab:\n"
                 "1. Key salah atau sudah kedaluwarsa\n"
                 "2. Key belum diisi di Streamlit Secrets\n"
                 "3. Ada spasi/karakter tersembunyi di key\n\n"
-                "**Solusi:** Buka [platform.openai.com/api-keys](https://platform.openai.com/api-keys) → buat key baru → paste ke Secrets."
+                "**Solusi:** Buka [platform.openai.com/api-keys](https://platform.openai.com/api-keys) buat key baru paste ke Secrets."
             )
-        return f"❌ Error AI: {e}"
+        return f"Error AI: {e}"
 
+
+# ══════════════════════════════════════════════════════════════════════════════
+# PERBAIKAN UTAMA — SYSTEM PROMPT TODO + PARSER JSON ROBUST
+# ══════════════════════════════════════════════════════════════════════════════
+#
+# MASALAH ASAL:
+#   Regex lama r'\{[^{}]*"action"\s*:\s*"add_event"[^{}]*\}' GAGAL karena:
+#   - [^{}]* tidak mengizinkan newline dalam JSON multi-baris
+#   - AI sering mengembalikan JSON dengan line-break di dalam key/value
+#   - Tidak ada fallback jika regex pertama gagal
+#
+# SOLUSI:
+#   1. SYSTEM_TODO diperketat: AI diwajibkan menulis JSON dalam SATU BARIS
+#      dengan contoh format yang eksplisit
+#   2. extract_event_json(): 3 strategi parsing berurutan
+#      - Strategi 1: regex dengan [^{}]* (cepat, untuk JSON 1 baris)
+#      - Strategi 2: brace-matching manual (untuk JSON multi-baris)
+#      - Strategi 3: key-value regex manual (last resort)
+#   3. validate_event_data(): normalisasi & validasi sebelum kirim ke Calendar
+# ══════════════════════════════════════════════════════════════════════════════
 
 SYSTEM_TODO = """Kamu adalah SAMS Todo Agent, asisten jadwal cerdas berbahasa Indonesia.
 Tugasmu: ekstrak informasi kegiatan dari pesan user dan simpan ke Google Calendar.
 
-Jika user menyebutkan kegiatan/aktivitas, ekstrak dan balas dengan JSON ini (plus kalimat ramah):
-{{"action":"add_event","title":"...","date":"YYYY-MM-DD","start_time":"HH:MM","end_time":"HH:MM","description":"...","location":"..."}}
+WAJIB — JIKA ADA KEGIATAN BARU UNTUK DIJADWALKAN:
+Tulis kalimat konfirmasi singkat, lalu di baris baru tulis JSON dalam SATU BARIS penuh:
+{{"action":"add_event","title":"JUDUL","date":"YYYY-MM-DD","start_time":"HH:MM","end_time":"HH:MM","description":"DESKRIPSI","location":"LOKASI"}}
 
-Aturan:
-- "date" format YYYY-MM-DD. Jika user bilang "besok", hitung dari hari ini.
-- "start_time" dan "end_time" format HH:MM (24 jam).
-- Jika end_time tidak disebutkan, tambahkan 1 jam dari start_time.
-- "location" boleh kosong string "" jika tidak disebutkan.
-- Jika tidak ada kegiatan baru, balas normal tanpa JSON.
-- Selalu konfirmasi detail yang kamu tangkap dengan ramah.
-Hari ini: {today}
+CONTOH RESPONS YANG BENAR:
+Siap! Saya jadwalkan rapat tim untuk besok pagi.
+{{"action":"add_event","title":"Rapat Tim","date":"2025-04-14","start_time":"09:00","end_time":"11:00","description":"Rapat tim mingguan","location":"Kantor"}}
+
+ATURAN JSON — WAJIB DIIKUTI:
+- Semua 7 key harus ada: action, title, date, start_time, end_time, description, location
+- "date" format YYYY-MM-DD. Hari ini: {today}. "besok" = tambah 1 hari dari hari ini
+- "start_time" dan "end_time" format HH:MM (24 jam). Contoh: "09:00", "14:30"
+- Jika end_time tidak disebutkan, tambahkan 1 jam dari start_time
+- "location" dan "description" boleh string kosong "" jika tidak disebutkan
+- JSON HARUS dalam satu baris — JANGAN gunakan newline atau indentasi di dalam JSON
+- JSON HARUS lengkap dan valid — jangan potong di tengah
+
+JIKA TIDAK ADA KEGIATAN BARU: balas normal tanpa JSON sama sekali.
 Gunakan bahasa Indonesia yang ramah dan singkat."""
 
 
-def call_ai_todo(messages: list) -> str:
-    """AI call khusus Todo Agent dengan system prompt todo."""
-    if st.session_state.get("budget_exceeded"):
-        return "⚠️ Budget sesi habis. Refresh halaman untuk memulai sesi baru."
+def extract_event_json(text: str) -> Optional[dict]:
+    """
+    Ekstrak JSON event dari teks AI dengan 3 strategi fallback.
+    Return dict jika berhasil, None jika tidak ada event ditemukan.
+    """
+    if not text or "add_event" not in text:
+        return None
 
+    # Strategi 1: regex [^{}]* — cepat, cocok JSON 1 baris
+    for m in re.findall(r'\{[^{}]+\}', text):
+        try:
+            data = json.loads(m)
+            if data.get("action") == "add_event":
+                return data
+        except Exception:
+            pass
+
+    # Strategi 2: brace-matching manual — menangani JSON multi-baris
+    start = text.find("{")
+    while start != -1:
+        depth = 0
+        for i in range(start, len(text)):
+            if text[i] == "{":
+                depth += 1
+            elif text[i] == "}":
+                depth -= 1
+                if depth == 0:
+                    candidate = text[start:i + 1]
+                    # Bersihkan whitespace berlebih sebelum parse
+                    clean = re.sub(r'\s+', ' ', candidate).strip()
+                    try:
+                        data = json.loads(clean)
+                        if data.get("action") == "add_event":
+                            return data
+                    except Exception:
+                        pass
+                    break
+        start = text.find("{", start + 1)
+
+    # Strategi 3: ekstrak key-value secara individual (last resort)
+    normalized_text = text.replace(" ", "")
+    if '"action":"add_event"' in normalized_text:
+        extracted = {}
+        for key in ["action", "title", "date", "start_time", "end_time", "description", "location"]:
+            m = re.search(r'"' + key + r'"\s*:\s*"([^"]*)"', text)
+            if m:
+                extracted[key] = m.group(1)
+        if extracted.get("action") == "add_event" and extracted.get("title") and extracted.get("date"):
+            return extracted
+
+    return None
+
+
+def validate_event_data(data: dict) -> tuple[bool, str, dict]:
+    """
+    Validasi dan normalisasi data event.
+    Return: (valid, pesan_error, data_ternormalisasi)
+    """
+    today_str = str(datetime.date.today())
+
+    title = str(data.get("title", "")).strip()
+    if not title:
+        return False, "Judul kegiatan tidak boleh kosong", {}
+
+    date_str = str(data.get("date", today_str)).strip()
+    try:
+        datetime.datetime.strptime(date_str, "%Y-%m-%d")
+    except ValueError:
+        date_str = today_str  # fallback ke hari ini jika format salah
+
+    start_time = str(data.get("start_time", "09:00")).strip()
+    end_time   = str(data.get("end_time",   "10:00")).strip()
+
+    time_re = re.compile(r'^\d{1,2}:\d{2}$')
+    if not time_re.match(start_time):
+        start_time = "09:00"
+    if not time_re.match(end_time):
+        try:
+            h, mn = map(int, start_time.split(":"))
+            end_time = f"{(h + 1) % 24:02d}:{mn:02d}"
+        except Exception:
+            end_time = "10:00"
+
+    # Pastikan end > start
+    try:
+        sh, sm = map(int, start_time.split(":"))
+        eh, em = map(int, end_time.split(":"))
+        if (eh * 60 + em) <= (sh * 60 + sm):
+            end_time = f"{(sh + 1) % 24:02d}:{sm:02d}"
+    except Exception:
+        pass
+
+    return True, "", {
+        "title":       title,
+        "date":        date_str,
+        "start_time":  start_time,
+        "end_time":    end_time,
+        "description": str(data.get("description", "")).strip(),
+        "location":    str(data.get("location",    "")).strip(),
+    }
+
+
+def call_ai_todo(messages: list) -> str:
+    """AI call khusus Todo Agent."""
+    if st.session_state.get("budget_exceeded"):
+        return "Budget sesi habis. Refresh halaman untuk memulai sesi baru."
     used_usd = tokens_to_usd(st.session_state.get("total_tokens", 0))
     remaining = MAX_BUDGET_USD - used_usd
     if remaining <= 0:
         st.session_state["budget_exceeded"] = True
-        return "⚠️ Budget sesi habis."
-
+        return "Budget sesi habis."
     max_tokens = min(600, int(remaining / 0.0000006))
     if max_tokens < 40:
         st.session_state["budget_exceeded"] = True
-        return "⚠️ Budget hampir habis. Refresh untuk sesi baru."
+        return "Budget hampir habis. Refresh untuk sesi baru."
 
-    today_str = datetime.date.today().strftime("%A, %d %B %Y")
-    system = SYSTEM_TODO.format(today=today_str)
+    system = SYSTEM_TODO.format(today=str(datetime.date.today()))
 
     try:
         client = get_openai_client()
@@ -472,22 +550,22 @@ def call_ai_todo(messages: list) -> str:
             model="gpt-4o-mini",
             messages=[{"role": "system", "content": system}] + messages,
             max_tokens=max_tokens,
-            temperature=0.4,
+            temperature=0.3,  # Diturunkan agar format JSON lebih konsisten
         )
         used = resp.usage.total_tokens if resp.usage else 200
         st.session_state["total_tokens"] = st.session_state.get("total_tokens", 0) + used
         return resp.choices[0].message.content
     except ValueError as e:
-        return f"⚠️ Konfigurasi API Key bermasalah: {e}"
+        return f"Konfigurasi API Key bermasalah: {e}"
     except Exception as e:
         err_str = str(e)
         if "401" in err_str or "Unauthorized" in err_str or "invalid_api_key" in err_str.lower():
             return (
-                "⚠️ **OpenAI API Key tidak valid (Error 401)**\n\n"
-                "Buka [platform.openai.com/api-keys](https://platform.openai.com/api-keys) → "
-                "buat key baru → paste ke Streamlit Secrets sebagai `OPENAI_API_KEY`."
+                "**OpenAI API Key tidak valid (Error 401)**\n\n"
+                "Buka [platform.openai.com/api-keys](https://platform.openai.com/api-keys) "
+                "buat key baru paste ke Streamlit Secrets sebagai OPENAI_API_KEY."
             )
-        return f"❌ Error AI: {e}"
+        return f"Error AI: {e}"
 
 
 # ── GOOGLE CALENDAR HELPERS ──────────────────────────────────────────────────
@@ -511,7 +589,6 @@ def get_calendar_service():
     try:
         from google.oauth2.service_account import Credentials
         from googleapiclient.discovery import build
-
         sa = st.secrets["gcp_service_account"]
         info = {
             "type":                        str(sa.get("type", "service_account")),
@@ -541,20 +618,16 @@ def add_google_calendar_event(title: str, date_str: str, start_time: str,
                                location: str = "") -> tuple[bool, str, str]:
     svc, err = get_calendar_service()
     if svc is None:
-        return False, f"❌ Gagal konek Calendar: {err}", ""
-
+        return False, f"Gagal konek Calendar: {err}", ""
     tz = get_calendar_timezone()
     cal_id = get_calendar_id()
-
     try:
-        start_dt = f"{date_str}T{start_time}:00"
-        end_dt   = f"{date_str}T{end_time}:00"
         body = {
             "summary":     title,
             "description": description,
             "location":    location,
-            "start":       {"dateTime": start_dt, "timeZone": tz},
-            "end":         {"dateTime": end_dt,   "timeZone": tz},
+            "start":       {"dateTime": f"{date_str}T{start_time}:00", "timeZone": tz},
+            "end":         {"dateTime": f"{date_str}T{end_time}:00",   "timeZone": tz},
             "reminders":   {
                 "useDefault": False,
                 "overrides": [
@@ -564,21 +637,19 @@ def add_google_calendar_event(title: str, date_str: str, start_time: str,
             },
         }
         result = svc.events().insert(calendarId=cal_id, body=body).execute()
-        link = result.get("htmlLink", "")
-        return True, "✅ Event berhasil ditambahkan ke Google Calendar", link
+        return True, "Event berhasil ditambahkan ke Google Calendar", result.get("htmlLink", "")
     except Exception as e:
-        return False, f"❌ Gagal tambah event: {e}", ""
+        return False, f"Gagal tambah event: {e}", ""
 
 
 def load_upcoming_events(max_results: int = 20) -> list[dict]:
-    svc, err = get_calendar_service()
+    svc, _ = get_calendar_service()
     if svc is None:
         return []
     try:
         now = datetime.datetime.utcnow().isoformat() + "Z"
-        cal_id = get_calendar_id()
         result = svc.events().list(
-            calendarId=cal_id,
+            calendarId=get_calendar_id(),
             timeMin=now,
             maxResults=max_results,
             singleEvents=True,
@@ -588,13 +659,11 @@ def load_upcoming_events(max_results: int = 20) -> list[dict]:
         for item in result.get("items", []):
             start = item.get("start", {})
             end   = item.get("end", {})
-            start_str = start.get("dateTime", start.get("date", ""))
-            end_str   = end.get("dateTime",   end.get("date",   ""))
             events.append({
                 "id":          item.get("id", ""),
                 "title":       item.get("summary", "(tanpa judul)"),
-                "start":       start_str,
-                "end":         end_str,
+                "start":       start.get("dateTime", start.get("date", "")),
+                "end":         end.get("dateTime",   end.get("date",   "")),
                 "description": item.get("description", ""),
                 "location":    item.get("location", ""),
                 "link":        item.get("htmlLink", ""),
@@ -607,13 +676,12 @@ def load_upcoming_events(max_results: int = 20) -> list[dict]:
 def delete_calendar_event(event_id: str) -> tuple[bool, str]:
     svc, err = get_calendar_service()
     if svc is None:
-        return False, f"❌ {err}"
+        return False, f"{err}"
     try:
-        cal_id = get_calendar_id()
-        svc.events().delete(calendarId=cal_id, eventId=event_id).execute()
-        return True, "✅ Event dihapus"
+        svc.events().delete(calendarId=get_calendar_id(), eventId=event_id).execute()
+        return True, "Event dihapus"
     except Exception as e:
-        return False, f"❌ Gagal hapus: {e}"
+        return False, f"Gagal hapus: {e}"
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -639,7 +707,6 @@ def init_state():
 
 init_state()
 
-
 # ══════════════════════════════════════════════════════════════════════════════
 # SECTION 5 — LOAD DATA
 # ══════════════════════════════════════════════════════════════════════════════
@@ -650,7 +717,6 @@ if not st.session_state["sheet_loaded"]:
     if loaded:
         st.session_state["finance_entries"] = loaded
     st.session_state["sheet_loaded"] = True
-
 
 # ══════════════════════════════════════════════════════════════════════════════
 # SECTION 6 — UI
@@ -669,7 +735,7 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# ── STATUS STRIP ──────────────────────────────────────────────────────────────
+# ── STATUS STRIP ─────────────────────────────────────────────────────────────
 gs_ok, gs_msg = sheet_status()
 openai_key    = get_openai_api_key()
 openai_ok     = bool(openai_key and openai_key.startswith("sk-"))
@@ -700,7 +766,6 @@ with col_s3:
     </div>
     """, unsafe_allow_html=True)
 
-# Tampilkan warning jika key tidak valid agar user tahu sebelum chat
 if not openai_ok:
     st.warning(
         "⚠️ **OPENAI_API_KEY belum dikonfigurasi atau tidak valid.**\n\n"
@@ -711,26 +776,20 @@ if not openai_ok:
 
 st.markdown("<div style='height:.8rem'></div>", unsafe_allow_html=True)
 
-# ── KONFIGURASI SIDEBAR ───────────────────────────────────────────────────────
+# ── SIDEBAR ───────────────────────────────────────────────────────────────────
 with st.sidebar:
     st.markdown("## ⚙️ Konfigurasi")
     st.markdown("---")
-
-    # Debug key status
     raw_key = get_openai_api_key()
     if raw_key:
         masked = raw_key[:7] + "..." + raw_key[-4:] if len(raw_key) > 11 else "***"
         if raw_key.startswith("sk-"):
             st.success(f"✅ API Key terdeteksi: `{masked}`")
         else:
-            st.error(f"❌ Key tidak valid (tidak diawali 'sk-'): `{masked}`")
+            st.error(f"❌ Key tidak valid: `{masked}`")
     else:
         st.error("❌ OPENAI_API_KEY tidak ditemukan")
-
     st.markdown("---")
-    st.markdown("""
-**Setup secrets.toml:**
-""")
     st.code("""
 OPENAI_API_KEY = "sk-proj-..."
 GOOGLE_SHEET_ID = "..."
@@ -759,12 +818,10 @@ client_x509_cert_url = "..."
         st.session_state["sheet_loaded"] = False
         st.session_state["finance_entries"] = []
         st.rerun()
-
     if st.button("🔄 Reload Events Calendar", use_container_width=True, type="secondary"):
         st.session_state["todo_cache_loaded"] = False
         st.session_state["todo_events_cache"] = []
         st.rerun()
-
     if st.button("🧹 Reset Cache Koneksi", use_container_width=True, type="secondary"):
         get_gspread_client.clear()
         get_worksheet.clear()
@@ -825,7 +882,7 @@ with tab_todo:
         grouped = defaultdict(list)
         for ev in events_cache:
             try:
-                dt = datetime.datetime.fromisoformat(ev["start"].replace("Z",""))
+                dt = datetime.datetime.fromisoformat(ev["start"].replace("Z", ""))
                 day_key = dt.strftime("%A, %d %B %Y")
             except Exception:
                 day_key = ev["start"][:10] if ev["start"] else "Tanggal tidak diketahui"
@@ -840,20 +897,17 @@ with tab_todo:
                 badge = "<span style='background:rgba(200,168,75,.2);color:#c8a84b;border:1px solid rgba(200,168,75,.4);border-radius:8px;padding:1px 8px;font-size:.68rem;margin-left:8px;'>Hari Ini</span>"
             elif day_key == tmr_label:
                 badge = "<span style='background:rgba(74,140,92,.18);color:#7ab892;border:1px solid rgba(74,140,92,.35);border-radius:8px;padding:1px 8px;font-size:.68rem;margin-left:8px;'>Besok</span>"
-
             st.markdown(f"<div style='color:#a8d5b5;font-size:.8rem;font-weight:700;margin:.6rem 0 .3rem;letter-spacing:.5px;'>{day_key}{badge}</div>",
                         unsafe_allow_html=True)
             for ev in day_evs:
                 try:
-                    start_dt = datetime.datetime.fromisoformat(ev["start"].replace("Z",""))
-                    end_dt   = datetime.datetime.fromisoformat(ev["end"].replace("Z",""))
+                    start_dt = datetime.datetime.fromisoformat(ev["start"].replace("Z", ""))
+                    end_dt   = datetime.datetime.fromisoformat(ev["end"].replace("Z", ""))
                     time_str = f"{start_dt.strftime('%H:%M')} – {end_dt.strftime('%H:%M')}"
                 except Exception:
                     time_str = ""
-
                 loc_html  = f"<span style='color:#7ab892;font-size:.7rem;'>📍 {ev['location']}</span>" if ev.get("location") else ""
                 link_html = f"<a href='{ev['link']}' target='_blank' style='color:#7ab892;font-size:.7rem;text-decoration:none;'>🔗 Buka</a>" if ev.get("link") else ""
-
                 st.markdown(f"""
                 <div style='background:rgba(26,58,42,.4);border:1px solid rgba(74,140,92,.2);
                             border-left:3px solid #4a8c5c;border-radius:0 10px 10px 0;
@@ -872,18 +926,25 @@ with tab_todo:
                         unsafe_allow_html=True)
 
     st.markdown("<hr class='divider'>", unsafe_allow_html=True)
-
     st.markdown("<div class='card-title' style='font-size:.9rem'>💬 Ceritakan Kegiatan Anda</div>",
                 unsafe_allow_html=True)
 
+    # Tampilkan riwayat chat (sembunyikan JSON dari tampilan)
     for msg in st.session_state["todo_messages"][-10:]:
         role = msg["role"]
-        css  = "msg-user" if role=="user" else "msg-ai"
-        label = "Anda" if role=="user" else "🌿 SAMS"
-        lbl_css = "color:#7ab892" if role=="user" else "color:#c8a84b"
+        css  = "msg-user" if role == "user" else "msg-ai"
+        label   = "Anda" if role == "user" else "🌿 SAMS"
+        lbl_css = "color:#7ab892" if role == "user" else "color:#c8a84b"
         content_disp = msg["content"]
-        if role == "assistant" and "{" in content_disp:
-            content_disp = re.sub(r'\{[^}]*?\}', '', content_disp, flags=re.DOTALL).strip()
+        if role == "assistant":
+            # Hapus semua JSON dari tampilan chat
+            content_disp = re.sub(r'\{[^{}]+\}', '', content_disp, flags=re.DOTALL).strip()
+            # Tangani JSON multi-baris dengan brace matching
+            while "{" in content_disp and "}" in content_disp:
+                new = re.sub(r'\{[^{}]*\}', '', content_disp).strip()
+                if new == content_disp:
+                    break
+                content_disp = new
         st.markdown(f"""
         <div class='{css}'>
           <div class='msg-lbl' style='{lbl_css}'>{label}</div>
@@ -906,7 +967,7 @@ with tab_todo:
     todo_quick = [
         "📋 Tampilkan agenda minggu ini",
         "🏃 Meeting besok jam 10 pagi 1 jam",
-        "📚 Belajar online Sabtu jam 14:00–16:00",
+        "📚 Belajar online Sabtu jam 14:00-16:00",
     ]
     todo_quick_clicked = None
     for i, qp in enumerate(todo_quick):
@@ -924,26 +985,34 @@ with tab_todo:
 
         st.session_state["todo_messages"].append({"role": "assistant", "content": reply})
 
-        if '"action":"add_event"' in reply or '"action": "add_event"' in reply:
-            m = re.search(r'\{[^{}]*"action"\s*:\s*"add_event"[^{}]*\}', reply, re.DOTALL)
-            if m:
-                try:
-                    data = json.loads(m.group())
+        # ── PERBAIKAN UTAMA: Gunakan extract_event_json() yang robust ─────
+        event_data = extract_event_json(reply)
+        if event_data:
+            valid, err_msg, norm = validate_event_data(event_data)
+            if valid:
+                with st.spinner("📅 Menyimpan ke Google Calendar…"):
                     ok, cal_msg, link = add_google_calendar_event(
-                        title=data.get("title", "Kegiatan"),
-                        date_str=data.get("date", str(datetime.date.today())),
-                        start_time=data.get("start_time", "09:00"),
-                        end_time=data.get("end_time", "10:00"),
-                        description=data.get("description", ""),
-                        location=data.get("location", ""),
+                        title=norm["title"],
+                        date_str=norm["date"],
+                        start_time=norm["start_time"],
+                        end_time=norm["end_time"],
+                        description=norm["description"],
+                        location=norm["location"],
                     )
-                    if ok:
-                        st.session_state["todo_cache_loaded"] = False
-                        st.success(f"{cal_msg} 🎉" + (f" [Buka di Calendar]({link})" if link else ""))
-                    else:
-                        st.warning(cal_msg)
-                except Exception as parse_err:
-                    st.warning(f"Gagal parse JSON event: {parse_err}")
+                if ok:
+                    st.session_state["todo_cache_loaded"] = False
+                    loc_info = f" · 📍{norm['location']}" if norm["location"] else ""
+                    link_info = f"\n\n[🔗 Buka di Google Calendar]({link})" if link else ""
+                    st.success(
+                        f"✅ **{norm['title']}** berhasil dijadwalkan!\n\n"
+                        f"📅 {norm['date']} · ⏰ {norm['start_time']}–{norm['end_time']}{loc_info}"
+                        f"{link_info}"
+                    )
+                else:
+                    st.warning(f"⚠️ {cal_msg}")
+            else:
+                st.warning(f"⚠️ Data event tidak lengkap: {err_msg}")
+        # ──────────────────────────────────────────────────────────────────
 
         st.rerun()
 
@@ -953,7 +1022,6 @@ with tab_todo:
             st.rerun()
 
     st.markdown("<hr class='divider'>", unsafe_allow_html=True)
-
     st.markdown("<div class='card-title' style='font-size:.9rem'>📝 Tambah Agenda Manual</div>",
                 unsafe_allow_html=True)
     st.markdown("<p style='color:#7ab892;font-size:.8rem;margin-bottom:.7rem'>Isi form berikut untuk menambahkan agenda langsung tanpa AI.</p>",
@@ -965,19 +1033,16 @@ with tab_todo:
             fm_title = st.text_input("Judul Kegiatan *", placeholder="Contoh: Rapat Tim Marketing")
         with fm2:
             fm_date = st.date_input("Tanggal *", value=datetime.date.today())
-
         fm3, fm4 = st.columns(2)
         with fm3:
             fm_start = st.time_input("Jam Mulai *", value=datetime.time(9, 0))
         with fm4:
             fm_end   = st.time_input("Jam Selesai *", value=datetime.time(10, 0))
-
         fm5, fm6 = st.columns(2)
         with fm5:
             fm_location = st.text_input("Lokasi (opsional)", placeholder="Contoh: Kantor Jakarta, Zoom, dll.")
         with fm6:
             fm_desc = st.text_input("Deskripsi (opsional)", placeholder="Catatan tambahan…")
-
         fm_submitted = st.form_submit_button("📅 Simpan ke Google Calendar", type="primary", use_container_width=True)
 
     if fm_submitted:
@@ -997,17 +1062,17 @@ with tab_todo:
                 )
             if ok:
                 st.session_state["todo_cache_loaded"] = False
-                st.success(f"{cal_msg} 🎉" + (f" [Buka di Calendar]({link})" if link else ""))
+                st.success(f"✅ {cal_msg} 🎉" + (f" [Buka di Calendar]({link})" if link else ""))
                 st.rerun()
             else:
-                st.error(cal_msg)
+                st.error(f"❌ {cal_msg}")
 
     if events_cache:
         st.markdown("<hr class='divider'>", unsafe_allow_html=True)
         with st.expander("🗑️ Hapus Event dari Calendar", expanded=False):
             st.markdown("<p style='color:#e08888;font-size:.82rem;'>⚠️ Hapus event dari Google Calendar secara permanen.</p>",
                         unsafe_allow_html=True)
-            ev_options = {f"{ev['title']} — {ev['start'][:16].replace('T',' ')}": ev["id"]
+            ev_options = {f"{ev['title']} — {ev['start'][:16].replace('T', ' ')}": ev["id"]
                           for ev in events_cache if ev.get("id")}
             if ev_options:
                 sel_ev = st.selectbox("Pilih event:", list(ev_options.keys()), key="del_ev_select")
@@ -1016,10 +1081,10 @@ with tab_todo:
                     ok, msg = delete_calendar_event(ev_id)
                     if ok:
                         st.session_state["todo_cache_loaded"] = False
-                        st.success(msg)
+                        st.success(f"✅ {msg}")
                         st.rerun()
                     else:
-                        st.error(msg)
+                        st.error(f"❌ {msg}")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1037,19 +1102,18 @@ with tab_catat:
         month_start = today.replace(day=1)
 
         def psum(df_, since, ftype):
-            return df_.loc[(df_["date_dt"] >= since) & (df_["type"]==ftype), "amount"].sum()
+            return df_.loc[(df_["date_dt"] >= since) & (df_["type"] == ftype), "amount"].sum()
 
         c1, c2, c3, c4 = st.columns(4)
         c1.metric("📅 Keluar Hari Ini",   f"Rp {psum(df_all, today, 'pengeluaran'):,.0f}")
         c2.metric("📆 Keluar Minggu Ini", f"Rp {psum(df_all, week_start, 'pengeluaran'):,.0f}")
         c3.metric("🗓️ Keluar Bulan Ini",  f"Rp {psum(df_all, month_start, 'pengeluaran'):,.0f}")
-        total_in  = df_all[df_all["type"]=="pemasukan"]["amount"].sum()
-        total_out = df_all[df_all["type"]=="pengeluaran"]["amount"].sum()
+        total_in  = df_all[df_all["type"] == "pemasukan"]["amount"].sum()
+        total_out = df_all[df_all["type"] == "pengeluaran"]["amount"].sum()
         balance = total_in - total_out
         c4.metric("💵 Saldo Bersih", f"Rp {balance:,.0f}",
-                  delta=f"{'Surplus' if balance>=0 else 'Defisit'}",
-                  delta_color="normal" if balance>=0 else "inverse")
-
+                  delta=f"{'Surplus' if balance >= 0 else 'Defisit'}",
+                  delta_color="normal" if balance >= 0 else "inverse")
         st.markdown("<hr class='divider'>", unsafe_allow_html=True)
 
     st.markdown("<div class='card-title'>➕ Tambah Transaksi Baru</div>", unsafe_allow_html=True)
@@ -1065,13 +1129,11 @@ with tab_catat:
             f_desc = st.text_input("Keterangan *", placeholder="Contoh: Makan siang, Gaji bulanan, Belanja grocery…")
         with fc2:
             f_type = st.selectbox("Jenis *", ["pengeluaran", "pemasukan"])
-
         fc3, fc4 = st.columns([2, 1])
         with fc3:
             f_amount = st.number_input("Jumlah (Rp) *", min_value=0, step=1_000, value=0)
         with fc4:
             f_date = st.date_input("Tanggal *", value=datetime.date.today())
-
         submitted = st.form_submit_button("💾 Simpan ke Google Sheets", type="primary", use_container_width=True)
 
     if submitted:
@@ -1089,14 +1151,12 @@ with tab_catat:
             }
             with st.spinner("☁️ Menyimpan ke Google Sheets…"):
                 ok, msg = append_finance_to_sheet(entry)
-
             if ok:
                 st.session_state["finance_entries"].append(entry)
-                st.success(f"✅ **{f_desc}** — Rp {f_amount:,.0f} ({f_type}) {msg}")
+                st.success(f"✅ **{f_desc}** — Rp {f_amount:,.0f} ({f_type}) ✔ {msg}")
             else:
                 st.session_state["finance_entries"].append(entry)
                 st.warning(f"⚠️ Tersimpan lokal (Google Sheets gagal: {msg}). Data belum permanen.")
-
             st.rerun()
 
     if entries:
@@ -1104,7 +1164,7 @@ with tab_catat:
         st.markdown("<div class='card-title' style='font-size:.9rem'>🕒 5 Transaksi Terbaru</div>",
                     unsafe_allow_html=True)
         for e in reversed(entries[-5:]):
-            icon = "🔴" if e["type"]=="pengeluaran" else "🟢"
+            icon = "🔴" if e["type"] == "pengeluaran" else "🟢"
             st.markdown(f"""
             <div style='background:rgba(26,58,42,.4);border:1px solid rgba(74,140,92,.18);
                         border-radius:10px;padding:.6rem 1rem;margin-bottom:.35rem;
@@ -1178,10 +1238,10 @@ with tab_riwayat:
                 if ok:
                     if 0 <= del_idx-1 < len(st.session_state["finance_entries"]):
                         st.session_state["finance_entries"].pop(del_idx-1)
-                    st.success(msg)
+                    st.success(f"✅ {msg}")
                     st.rerun()
                 else:
-                    st.error(msg)
+                    st.error(f"❌ {msg}")
 
         st.markdown("<hr class='divider'>", unsafe_allow_html=True)
         st.markdown("<div class='card-title' style='font-size:.9rem'>📈 Visualisasi</div>", unsafe_allow_html=True)
@@ -1263,9 +1323,9 @@ with tab_chat:
     else:
         for msg in st.session_state["chat_messages"][-10:]:
             role = msg["role"]
-            css = "msg-user" if role=="user" else "msg-ai"
-            label = "Anda" if role=="user" else "🌿 SAMS"
-            lbl_css = "color:#7ab892" if role=="user" else "color:#c8a84b"
+            css = "msg-user" if role == "user" else "msg-ai"
+            label   = "Anda" if role == "user" else "🌿 SAMS"
+            lbl_css = "color:#7ab892" if role == "user" else "color:#c8a84b"
             content = msg["content"]
             if role == "assistant" and "{" in content:
                 content = re.sub(r'\{[^}]*\}', '', content).strip()
@@ -1316,7 +1376,7 @@ with tab_chat:
                 top_cats  = df_ctx[df_ctx["type"]=="pengeluaran"].groupby("description")["amount"].sum().nlargest(3).to_dict()
                 recent_5  = entries[-5:]
                 ctx_lines = [
-                    f"[DATA KEUANGAN USER]",
+                    "[DATA KEUANGAN USER]",
                     f"Total pengeluaran: Rp {total_out:,.0f}",
                     f"Total pemasukan: Rp {total_in:,.0f}",
                     f"Pengeluaran hari ini: Rp {today_out:,.0f}",
