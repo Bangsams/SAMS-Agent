@@ -1,6 +1,6 @@
 """
-SAMS Financial Agent — Google Sheets Integration
-=================================================
+SAMS Financial Agent — Google Sheets Integration + AI Investment
+=================================================================
 Persyaratan:
   pip install streamlit openai gspread google-auth pandas plotly
 
@@ -155,6 +155,14 @@ html, body, [data-testid="stApp"] {
 .pill-green { background:rgba(74,140,92,.18);color:var(--sage);border:1px solid rgba(74,140,92,.35); }
 .pill-amber { background:rgba(200,168,75,.14);color:var(--amber);border:1px solid rgba(200,168,75,.35); }
 .pill-red   { background:rgba(224,85,85,.14);color:#e08888;border:1px solid rgba(224,85,85,.35); }
+
+/* ── Investment Tab Styles ── */
+.metric-chip {
+    display:inline-flex;align-items:center;gap:5px;
+    background:rgba(26,58,42,0.6);border:1px solid rgba(74,140,92,0.25);
+    border-radius:8px;padding:5px 12px;font-size:.75rem;color:#a8d5b5;margin:2px;
+}
+.metric-chip .val { color:#c8a84b;font-weight:700; }
 
 #MainMenu, footer, header { visibility:hidden !important; }
 </style>
@@ -383,23 +391,7 @@ def call_ai(messages: list) -> str:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# PERBAIKAN UTAMA — SYSTEM PROMPT TODO + PARSER JSON ROBUST
-# ══════════════════════════════════════════════════════════════════════════════
-#
-# MASALAH ASAL:
-#   Regex lama r'\{[^{}]*"action"\s*:\s*"add_event"[^{}]*\}' GAGAL karena:
-#   - [^{}]* tidak mengizinkan newline dalam JSON multi-baris
-#   - AI sering mengembalikan JSON dengan line-break di dalam key/value
-#   - Tidak ada fallback jika regex pertama gagal
-#
-# SOLUSI:
-#   1. SYSTEM_TODO diperketat: AI diwajibkan menulis JSON dalam SATU BARIS
-#      dengan contoh format yang eksplisit
-#   2. extract_event_json(): 3 strategi parsing berurutan
-#      - Strategi 1: regex dengan [^{}]* (cepat, untuk JSON 1 baris)
-#      - Strategi 2: brace-matching manual (untuk JSON multi-baris)
-#      - Strategi 3: key-value regex manual (last resort)
-#   3. validate_event_data(): normalisasi & validasi sebelum kirim ke Calendar
+# SYSTEM PROMPT TODO + PARSER JSON ROBUST
 # ══════════════════════════════════════════════════════════════════════════════
 
 SYSTEM_TODO = """Kamu adalah SAMS Todo Agent, asisten jadwal cerdas berbahasa Indonesia.
@@ -427,14 +419,8 @@ Gunakan bahasa Indonesia yang ramah dan singkat."""
 
 
 def extract_event_json(text: str) -> Optional[dict]:
-    """
-    Ekstrak JSON event dari teks AI dengan 3 strategi fallback.
-    Return dict jika berhasil, None jika tidak ada event ditemukan.
-    """
     if not text or "add_event" not in text:
         return None
-
-    # Strategi 1: regex [^{}]* — cepat, cocok JSON 1 baris
     for m in re.findall(r'\{[^{}]+\}', text):
         try:
             data = json.loads(m)
@@ -442,8 +428,6 @@ def extract_event_json(text: str) -> Optional[dict]:
                 return data
         except Exception:
             pass
-
-    # Strategi 2: brace-matching manual — menangani JSON multi-baris
     start = text.find("{")
     while start != -1:
         depth = 0
@@ -454,7 +438,6 @@ def extract_event_json(text: str) -> Optional[dict]:
                 depth -= 1
                 if depth == 0:
                     candidate = text[start:i + 1]
-                    # Bersihkan whitespace berlebih sebelum parse
                     clean = re.sub(r'\s+', ' ', candidate).strip()
                     try:
                         data = json.loads(clean)
@@ -464,8 +447,6 @@ def extract_event_json(text: str) -> Optional[dict]:
                         pass
                     break
         start = text.find("{", start + 1)
-
-    # Strategi 3: ekstrak key-value secara individual (last resort)
     normalized_text = text.replace(" ", "")
     if '"action":"add_event"' in normalized_text:
         extracted = {}
@@ -475,30 +456,21 @@ def extract_event_json(text: str) -> Optional[dict]:
                 extracted[key] = m.group(1)
         if extracted.get("action") == "add_event" and extracted.get("title") and extracted.get("date"):
             return extracted
-
     return None
 
 
 def validate_event_data(data: dict) -> tuple[bool, str, dict]:
-    """
-    Validasi dan normalisasi data event.
-    Return: (valid, pesan_error, data_ternormalisasi)
-    """
     today_str = str(datetime.date.today())
-
     title = str(data.get("title", "")).strip()
     if not title:
         return False, "Judul kegiatan tidak boleh kosong", {}
-
     date_str = str(data.get("date", today_str)).strip()
     try:
         datetime.datetime.strptime(date_str, "%Y-%m-%d")
     except ValueError:
-        date_str = today_str  # fallback ke hari ini jika format salah
-
+        date_str = today_str
     start_time = str(data.get("start_time", "09:00")).strip()
     end_time   = str(data.get("end_time",   "10:00")).strip()
-
     time_re = re.compile(r'^\d{1,2}:\d{2}$')
     if not time_re.match(start_time):
         start_time = "09:00"
@@ -508,8 +480,6 @@ def validate_event_data(data: dict) -> tuple[bool, str, dict]:
             end_time = f"{(h + 1) % 24:02d}:{mn:02d}"
         except Exception:
             end_time = "10:00"
-
-    # Pastikan end > start
     try:
         sh, sm = map(int, start_time.split(":"))
         eh, em = map(int, end_time.split(":"))
@@ -517,7 +487,6 @@ def validate_event_data(data: dict) -> tuple[bool, str, dict]:
             end_time = f"{(sh + 1) % 24:02d}:{sm:02d}"
     except Exception:
         pass
-
     return True, "", {
         "title":       title,
         "date":        date_str,
@@ -529,7 +498,6 @@ def validate_event_data(data: dict) -> tuple[bool, str, dict]:
 
 
 def call_ai_todo(messages: list) -> str:
-    """AI call khusus Todo Agent."""
     if st.session_state.get("budget_exceeded"):
         return "Budget sesi habis. Refresh halaman untuk memulai sesi baru."
     used_usd = tokens_to_usd(st.session_state.get("total_tokens", 0))
@@ -541,16 +509,14 @@ def call_ai_todo(messages: list) -> str:
     if max_tokens < 40:
         st.session_state["budget_exceeded"] = True
         return "Budget hampir habis. Refresh untuk sesi baru."
-
     system = SYSTEM_TODO.format(today=str(datetime.date.today()))
-
     try:
         client = get_openai_client()
         resp = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[{"role": "system", "content": system}] + messages,
             max_tokens=max_tokens,
-            temperature=0.3,  # Diturunkan agar format JSON lebih konsisten
+            temperature=0.3,
         )
         used = resp.usage.total_tokens if resp.usage else 200
         st.session_state["total_tokens"] = st.session_state.get("total_tokens", 0) + used
@@ -685,6 +651,206 @@ def delete_calendar_event(event_id: str) -> tuple[bool, str]:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+# SECTION 3b — AI INVESTMENT (OpenAI dengan Web Search)
+# ══════════════════════════════════════════════════════════════════════════════
+
+INVESTOR_SYSTEM_PROMPT = """Kamu adalah SAMS Investment Analyst, analis investasi fundamental profesional berbahasa Indonesia.
+Tugasmu: mencari dan menganalisis berita & data terbaru seputar saham IDX atau kripto untuk investor jangka menengah-panjang.
+
+SUMBER PRIORITAS:
+- SAHAM IDX: idx.co.id, cnbcindonesia.com, kontan.co.id, bisnis.com, rtibusiness.com, stockbit.com
+- KRIPTO: coingecko.com, coinmarketcap.com, messari.io, cryptoslate.com, lunarcrush.com
+
+WAJIB SERTAKAN metrik fundamental berikut sesuai jenis aset:
+
+📊 SAHAM IDX:
+- P/E Ratio (Price to Earnings) & PBV (Price to Book Value)
+- EPS (Earnings Per Share / Laba per Saham)
+- ROE (Return on Equity) & ROA
+- Revenue Growth YoY & Net Profit Growth
+- Dividend Yield (jika ada)
+- Debt to Equity Ratio
+- Market Capitalization
+- Konsensus analis (target harga, rekomendasi Buy/Hold/Sell)
+
+🪙 KRIPTO:
+- Market Cap & Fully Diluted Valuation (FDV)
+- Volume 24h & Liquidity
+- Holder Count & distribusi token
+- Token Unlock Schedule (vesting)
+- TVL (Total Value Locked) jika DeFi
+- Narasi & Use Case utama
+- Social Sentiment Score (Fear & Greed Index, LunarCrush Score)
+- Developer Activity (GitHub commits)
+
+FORMAT RESPONS WAJIB:
+## 🌍 Ringkasan Pasar Hari Ini
+[kondisi pasar secara umum]
+
+## 📰 Berita & Insight Terpenting
+[3-5 item, masing-masing dengan judul + link sumber + tanggal + analisis + metrik kunci + sentimen]
+
+## 💎 Aset yang Patut Diperhatikan
+[rekomendasi 2-3 aset dengan alasan fundamental + metrik]
+
+## ⚠️ Risiko yang Perlu Diwaspadai
+[risiko utama investor]
+
+Cantumkan link sumber yang valid dan aktif. Gunakan bahasa Indonesia profesional."""
+
+TRADER_SYSTEM_PROMPT = """Kamu adalah SAMS Trading Analyst, analis teknikal harian-mingguan profesional berbahasa Indonesia.
+Tugasmu: memberikan analisis teknikal mendalam untuk trader saham IDX dan kripto dengan time frame D1 (harian) dan W1 (mingguan).
+
+SUMBER DATA:
+- Teknikal: TradingView, RTI Business, Stockbit, IDX
+- Kripto: CoinGlass, CoinGecko, Binance
+- Broker Summary: Stockbit, Mirae Asset, Mandiri Sekuritas, BCA Sekuritas, BRI Danareksa, Phillip Sekuritas
+
+WAJIB SERTAKAN metrik teknikal berikut untuk SETIAP aset yang dianalisis:
+
+📈 ANALISIS TEKNIKAL:
+- Harga saat ini & pergerakan hari ini (%)
+- Trend utama: Uptrend / Downtrend / Sideways
+- Support levels: S1, S2 (dalam angka harga)
+- Resistance levels: R1, R2 (dalam angka harga)
+- Moving Average: posisi harga vs MA20, MA50, MA200
+- RSI (14): nilai + status Overbought/Oversold/Netral
+- MACD: sinyal Bullish/Bearish crossover, histogram
+- Volume: konfirmasi tren (volume naik/turun)
+- Pola candlestick penting (jika ada)
+
+🎯 SETUP TRADING:
+- Level Entry yang disarankan (harga spesifik)
+- Stop Loss (SL) — harga spesifik + % risiko
+- Take Profit (TP1 & TP2) — harga spesifik
+- Risk/Reward Ratio (minimal 1:2)
+- Time frame target
+
+📋 BROKER SUMMARY (khusus saham IDX):
+- Net Buy/Sell Asing (Foreign Flow hari ini)
+- Broker dengan akumulasi terbesar (top 3)
+- Rekomendasi konsensus analis + target price
+
+FORMAT RESPONS WAJIB:
+## 📊 Kondisi Market Hari Ini
+[IHSG / BTC Dominance + sentimen market]
+
+## 🎯 Analisis Aset Pilihan
+[3-4 aset dengan setup teknikal lengkap per aset]
+
+## 👀 Watchlist Trader Minggu Ini
+[5 aset yang perlu dipantau dengan level kunci]
+
+## ⚡ Sinyal Penting yang Wajib Dipantau
+[alert teknikal kritis]
+
+Gunakan angka harga yang SPESIFIK dan KONKRIT. Cantumkan sumber data. Bahasa Indonesia presisi."""
+
+
+def call_investment_ai_openai(query: str, mode: str, asset_type: str) -> str:
+    """
+    Panggil OpenAI GPT-4o dengan web search tool (Responses API)
+    untuk analisis investasi real-time.
+    """
+    try:
+        from openai import OpenAI
+        key = get_openai_api_key()
+        if not key:
+            return "⚠️ **OPENAI_API_KEY tidak ditemukan.** Tambahkan ke Streamlit Secrets."
+        if not key.startswith("sk-"):
+            return "⚠️ **OPENAI_API_KEY tidak valid.** Pastikan diawali dengan 'sk-'."
+
+        client = OpenAI(api_key=key)
+
+        system_prompt = INVESTOR_SYSTEM_PROMPT if mode == "investor" else TRADER_SYSTEM_PROMPT
+        today_str = datetime.date.today().strftime("%d %B %Y")
+
+        user_message = f"""Lakukan analisis {'fundamental investor' if mode == 'investor' else 'teknikal trader'} untuk {asset_type}.
+
+Query: "{query}"
+
+Hari ini: {today_str} (Waktu Indonesia)
+Prioritaskan data dan berita yang baru terbit hari ini atau maksimal 3 hari terakhir.
+Gunakan web search untuk mendapatkan informasi TERBARU dan REAL-TIME.
+Pastikan semua link sumber yang kamu cantumkan valid dan dapat diakses."""
+
+        # Gunakan OpenAI Responses API dengan built-in web search tool
+        response = client.responses.create(
+            model="gpt-4o",
+            tools=[{"type": "web_search_preview"}],
+            input=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user",   "content": user_message},
+            ],
+        )
+
+        # Ekstrak output text dari response
+        result_text = ""
+        for item in response.output:
+            if hasattr(item, "type") and item.type == "message":
+                for block in item.content:
+                    if hasattr(block, "type") and block.type == "output_text":
+                        result_text += block.text
+
+        return result_text if result_text.strip() else "Tidak ada hasil analisis yang dikembalikan."
+
+    except Exception as e:
+        err_str = str(e)
+        # Fallback: jika Responses API tidak tersedia, gunakan Chat Completions biasa
+        if "responses" in err_str.lower() or "not found" in err_str.lower() or "404" in err_str:
+            return _investment_fallback_chat(query, mode, asset_type)
+        if "401" in err_str or "unauthorized" in err_str.lower() or "invalid_api_key" in err_str.lower():
+            return (
+                "❌ **OpenAI API Key tidak valid (Error 401)**\n\n"
+                "Buka [platform.openai.com/api-keys](https://platform.openai.com/api-keys) "
+                "buat key baru dan paste ke Streamlit Secrets."
+            )
+        if "429" in err_str:
+            return "⚠️ **Rate limit tercapai.** Tunggu beberapa detik lalu coba lagi."
+        return _investment_fallback_chat(query, mode, asset_type)
+
+
+def _investment_fallback_chat(query: str, mode: str, asset_type: str) -> str:
+    """
+    Fallback menggunakan Chat Completions API (gpt-4o-mini) tanpa web search
+    jika Responses API tidak tersedia atau terjadi error.
+    """
+    try:
+        from openai import OpenAI
+        client = OpenAI(api_key=get_openai_api_key())
+
+        system_prompt = INVESTOR_SYSTEM_PROMPT if mode == "investor" else TRADER_SYSTEM_PROMPT
+        today_str = datetime.date.today().strftime("%d %B %Y")
+
+        note = (
+            "\n\n⚠️ **Catatan:** Analisis ini menggunakan pengetahuan model tanpa web search real-time "
+            "(OpenAI Responses API dengan web_search_preview memerlukan akses khusus atau paket berbayar). "
+            "Untuk data terbaru, silakan cek langsung ke sumber seperti IDX, CNBC Indonesia, CoinGecko, atau TradingView."
+        )
+
+        resp = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": (
+                    f"Lakukan analisis {'fundamental investor' if mode == 'investor' else 'teknikal trader'} "
+                    f"untuk {asset_type}. Query: \"{query}\"\n"
+                    f"Hari ini: {today_str}. Berikan analisis sebaik mungkin berdasarkan pengetahuanmu, "
+                    f"dan cantumkan saran untuk mengecek sumber terbaru."
+                )},
+            ],
+            max_tokens=2500,
+            temperature=0.4,
+        )
+        used = resp.usage.total_tokens if resp.usage else 500
+        st.session_state["total_tokens"] = st.session_state.get("total_tokens", 0) + used
+        return resp.choices[0].message.content + note
+
+    except Exception as e2:
+        return f"❌ **Error:** {e2}"
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 # SECTION 4 — SESSION STATE INIT
 # ══════════════════════════════════════════════════════════════════════════════
 
@@ -700,6 +866,11 @@ def init_state():
         "todo_messages":      [],
         "todo_events_cache":  [],
         "todo_cache_loaded":  False,
+        # Investment
+        "inv_mode":           "investor",
+        "inv_asset":          "Saham IDX",
+        "inv_result":         "",
+        "inv_query":          "",
     }
     for k, v in defaults.items():
         if k not in st.session_state:
@@ -730,7 +901,7 @@ st.markdown("""
     🌿 SAMS Agent
   </div>
   <div style='color:#7ab892;font-size:.8rem;letter-spacing:3px;text-transform:uppercase;margin-top:.3rem;'>
-    Google Sheets · Google Calendar · Real-time Sync
+    Google Sheets · Google Calendar · AI Investment · Real-time Sync
   </div>
 </div>
 """, unsafe_allow_html=True)
@@ -835,9 +1006,13 @@ client_x509_cert_url = "..."
 # TAB LAYOUT
 # ══════════════════════════════════════════════════════════════════════════════
 
-tab_todo, tab_catat, tab_riwayat, tab_chat = st.tabs(
-    ["🗓️ Todo Task Agent", "➕ Catat Transaksi", "📊 Riwayat & Analitik", "💬 Chat AI Keuangan"]
-)
+tab_todo, tab_catat, tab_riwayat, tab_chat, tab_invest = st.tabs([
+    "🗓️ Todo Task Agent",
+    "➕ Catat Transaksi",
+    "📊 Riwayat & Analitik",
+    "💬 Chat AI Keuangan",
+    "💹 AI Investment",
+])
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -929,7 +1104,6 @@ with tab_todo:
     st.markdown("<div class='card-title' style='font-size:.9rem'>💬 Ceritakan Kegiatan Anda</div>",
                 unsafe_allow_html=True)
 
-    # Tampilkan riwayat chat (sembunyikan JSON dari tampilan)
     for msg in st.session_state["todo_messages"][-10:]:
         role = msg["role"]
         css  = "msg-user" if role == "user" else "msg-ai"
@@ -937,9 +1111,7 @@ with tab_todo:
         lbl_css = "color:#7ab892" if role == "user" else "color:#c8a84b"
         content_disp = msg["content"]
         if role == "assistant":
-            # Hapus semua JSON dari tampilan chat
             content_disp = re.sub(r'\{[^{}]+\}', '', content_disp, flags=re.DOTALL).strip()
-            # Tangani JSON multi-baris dengan brace matching
             while "{" in content_disp and "}" in content_disp:
                 new = re.sub(r'\{[^{}]*\}', '', content_disp).strip()
                 if new == content_disp:
@@ -979,13 +1151,9 @@ with tab_todo:
 
     if final_todo_input:
         st.session_state["todo_messages"].append({"role": "user", "content": final_todo_input})
-
         with st.spinner("🌿 SAMS memproses kegiatan…"):
             reply = call_ai_todo(st.session_state["todo_messages"][-8:])
-
         st.session_state["todo_messages"].append({"role": "assistant", "content": reply})
-
-        # ── PERBAIKAN UTAMA: Gunakan extract_event_json() yang robust ─────
         event_data = extract_event_json(reply)
         if event_data:
             valid, err_msg, norm = validate_event_data(event_data)
@@ -1012,8 +1180,6 @@ with tab_todo:
                     st.warning(f"⚠️ {cal_msg}")
             else:
                 st.warning(f"⚠️ Data event tidak lengkap: {err_msg}")
-        # ──────────────────────────────────────────────────────────────────
-
         st.rerun()
 
     if st.session_state["todo_messages"]:
@@ -1427,6 +1593,368 @@ with tab_chat:
                 st.rerun()
 
 
+# ══════════════════════════════════════════════════════════════════════════════
+# TAB 4 — AI INVESTMENT
+# ══════════════════════════════════════════════════════════════════════════════
+with tab_invest:
+
+    # ── Header ───────────────────────────────────────────────────────────────
+    st.markdown("""
+    <div style='text-align:center;padding:.6rem 0 1.2rem;'>
+      <div style='font-family:"Playfair Display",serif;font-size:1.7rem;font-weight:700;
+           background:linear-gradient(135deg,#c8a84b,#e8c86b,#a8d5b5);
+           -webkit-background-clip:text;-webkit-text-fill-color:transparent;letter-spacing:.5px;'>
+        💹 SAMS Investment Agent
+      </div>
+      <div style='color:#7ab892;font-size:.74rem;letter-spacing:2.5px;text-transform:uppercase;margin-top:.3rem;'>
+        Real-time Market Intelligence · Saham IDX &amp; Kripto
+      </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    if not openai_ok:
+        st.warning("⚠️ **OPENAI_API_KEY belum dikonfigurasi.** Tab ini memerlukan OpenAI API Key yang valid.")
+    else:
+        # ── MODE SELECTOR ─────────────────────────────────────────────────────
+        st.markdown("""
+        <div style='color:#7ab892;font-size:.78rem;font-weight:700;letter-spacing:.8px;
+                    text-transform:uppercase;margin-bottom:.6rem;'>
+          Pilih Mode Analisis
+        </div>
+        """, unsafe_allow_html=True)
+
+        mode_col1, mode_col2, mode_col3 = st.columns([1, 1, 3])
+        with mode_col1:
+            btn_investor_type = "primary" if st.session_state["inv_mode"] == "investor" else "secondary"
+            btn_investor_label = "✅ Investor (Aktif)" if st.session_state["inv_mode"] == "investor" else "📈 Mode Investor"
+            if st.button(btn_investor_label, key="btn_mode_investor", type=btn_investor_type, use_container_width=True):
+                st.session_state["inv_mode"] = "investor"
+                st.session_state["inv_result"] = ""
+                st.rerun()
+        with mode_col2:
+            btn_trader_type = "primary" if st.session_state["inv_mode"] == "trader" else "secondary"
+            btn_trader_label = "✅ Trader (Aktif)" if st.session_state["inv_mode"] == "trader" else "⚡ Mode Trader"
+            if st.button(btn_trader_label, key="btn_mode_trader", type=btn_trader_type, use_container_width=True):
+                st.session_state["inv_mode"] = "trader"
+                st.session_state["inv_result"] = ""
+                st.rerun()
+
+        mode = st.session_state["inv_mode"]
+
+        # ── MODE DESCRIPTION CARD ─────────────────────────────────────────────
+        if mode == "investor":
+            st.markdown("""
+            <div class='card' style='margin-top:.7rem;border-color:rgba(74,140,92,0.4);'>
+              <div style='display:flex;align-items:flex-start;gap:1rem;'>
+                <span style='font-size:2rem;line-height:1;'>📈</span>
+                <div>
+                  <div style='color:#a8d5b5;font-weight:700;font-size:.9rem;margin-bottom:.3rem;'>
+                    Mode Investor — Analisis Fundamental Jangka Menengah/Panjang
+                  </div>
+                  <div style='color:#7ab892;font-size:.8rem;line-height:1.6;'>
+                    Horizon investasi <strong style='color:#c8a84b;'>3 bulan hingga beberapa tahun</strong>.
+                    Analisis mencakup valuasi, profitabilitas, pertumbuhan, dan sentimen pasar.
+                    Sumber: IDX, CNBC Indonesia, Kontan, Bisnis.com, CoinGecko, Messari, LunarCrush.
+                  </div>
+                  <div style='margin-top:.6rem;display:flex;flex-wrap:wrap;gap:4px;'>
+                    <span class='metric-chip'>P/E Ratio</span>
+                    <span class='metric-chip'>EPS / Laba per Saham</span>
+                    <span class='metric-chip'>PBV</span>
+                    <span class='metric-chip'>ROE</span>
+                    <span class='metric-chip'>Revenue Growth YoY</span>
+                    <span class='metric-chip'>Debt/Equity</span>
+                    <span class='metric-chip'>Market Cap</span>
+                    <span class='metric-chip'>Token Holders</span>
+                    <span class='metric-chip'>TVL</span>
+                    <span class='metric-chip'>Sentiment Score</span>
+                    <span class='metric-chip'>Token Unlock</span>
+                    <span class='metric-chip'>Dividend Yield</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            st.markdown("""
+            <div class='card' style='margin-top:.7rem;border-color:rgba(200,168,75,0.4);'>
+              <div style='display:flex;align-items:flex-start;gap:1rem;'>
+                <span style='font-size:2rem;line-height:1;'>⚡</span>
+                <div>
+                  <div style='color:#c8a84b;font-weight:700;font-size:.9rem;margin-bottom:.3rem;'>
+                    Mode Trader — Analisis Teknikal Harian &amp; Mingguan (D1/W1)
+                  </div>
+                  <div style='color:#7ab892;font-size:.8rem;line-height:1.6;'>
+                    Time frame <strong style='color:#c8a84b;'>1 hari hingga 1 minggu</strong>.
+                    Analisis teknikal lengkap dengan level harga konkrit, broker summary,
+                    dan foreign flow untuk saham IDX.
+                  </div>
+                  <div style='margin-top:.6rem;display:flex;flex-wrap:wrap;gap:4px;'>
+                    <span class='metric-chip'>Support S1/S2</span>
+                    <span class='metric-chip'>Resistance R1/R2</span>
+                    <span class='metric-chip'>MA20 / MA50 / MA200</span>
+                    <span class='metric-chip'>RSI (14)</span>
+                    <span class='metric-chip'>MACD</span>
+                    <span class='metric-chip'>Volume Analisis</span>
+                    <span class='metric-chip'>Candlestick Pattern</span>
+                    <span class='metric-chip'>Entry / SL / TP</span>
+                    <span class='metric-chip'>Risk/Reward Ratio</span>
+                    <span class='metric-chip'>Foreign Flow</span>
+                    <span class='metric-chip'>Broker Summary</span>
+                    <span class='metric-chip'>Konsensus Analis</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        st.markdown("<hr class='divider'>", unsafe_allow_html=True)
+
+        # ── ASSET TYPE ────────────────────────────────────────────────────────
+        col_asset, col_space = st.columns([1, 2])
+        with col_asset:
+            asset_type = st.selectbox(
+                "Jenis Aset",
+                ["Saham IDX", "Cryptocurrency", "Keduanya"],
+                index=["Saham IDX", "Cryptocurrency", "Keduanya"].index(
+                    st.session_state["inv_asset"]
+                ),
+                key="inv_asset_select",
+            )
+            st.session_state["inv_asset"] = asset_type
+
+        # ── QUICK WATCHLIST ───────────────────────────────────────────────────
+        st.markdown("""
+        <div style='color:#7ab892;font-size:.78rem;font-weight:700;
+                    letter-spacing:.6px;margin:.6rem 0 .4rem;'>
+          🔖 Quick Watchlist — Klik untuk analisis langsung
+        </div>
+        """, unsafe_allow_html=True)
+
+        if asset_type == "Saham IDX":
+            watchlist_row1 = ["BBCA", "BBRI", "BMRI", "TLKM"]
+            watchlist_row2 = ["ASII", "GOTO", "BREN", "ADRO"]
+        elif asset_type == "Cryptocurrency":
+            watchlist_row1 = ["Bitcoin (BTC)", "Ethereum (ETH)", "BNB", "Solana (SOL)"]
+            watchlist_row2 = ["XRP", "Avalanche (AVAX)", "Polkadot (DOT)", "Chainlink (LINK)"]
+        else:
+            watchlist_row1 = ["BBCA", "BBRI", "Bitcoin (BTC)", "Ethereum (ETH)"]
+            watchlist_row2 = ["GOTO", "TLKM", "Solana (SOL)", "BNB"]
+
+        quick_ticker = None
+        wl1_cols = st.columns(4)
+        for i, ticker in enumerate(watchlist_row1):
+            with wl1_cols[i]:
+                if st.button(f"📌 {ticker}", key=f"wl1_{mode}_{i}", use_container_width=True):
+                    quick_ticker = ticker
+        wl2_cols = st.columns(4)
+        for i, ticker in enumerate(watchlist_row2):
+            with wl2_cols[i]:
+                if st.button(f"📌 {ticker}", key=f"wl2_{mode}_{i}", use_container_width=True):
+                    quick_ticker = ticker
+
+        st.markdown("<hr class='divider'>", unsafe_allow_html=True)
+
+        # ── QUICK PROMPTS ─────────────────────────────────────────────────────
+        st.markdown("""
+        <div style='color:#7ab892;font-size:.78rem;font-weight:700;
+                    letter-spacing:.6px;margin-bottom:.4rem;'>
+          ⚡ Analisis Cepat
+        </div>
+        """, unsafe_allow_html=True)
+
+        if mode == "investor":
+            if asset_type == "Saham IDX":
+                quick_prompts_list = [
+                    "🏦 Saham perbankan big-4 terbaik untuk investasi jangka panjang",
+                    "⚡ Sektor energi & EBT paling menarik secara fundamental",
+                    "🌐 Saham teknologi IDX dengan pertumbuhan revenue tertinggi",
+                    "💎 Blue chip IDX dengan valuasi paling murah saat ini",
+                ]
+            elif asset_type == "Cryptocurrency":
+                quick_prompts_list = [
+                    "🪙 Bitcoin analisis fundamental & on-chain terbaru hari ini",
+                    "🔥 Altcoin Layer-1 dengan narasi terkuat dan valuasi menarik",
+                    "🌊 DeFi protocol TVL terbesar & paling undervalued saat ini",
+                    "📊 Sentimen kripto global & Fear Greed Index terkini",
+                ]
+            else:
+                quick_prompts_list = [
+                    "📰 Ringkasan berita pasar modal & kripto terpenting hari ini",
+                    "💹 Portofolio ideal campuran saham IDX & kripto jangka panjang",
+                    "🌍 Dampak makroekonomi global terhadap IDX & pasar kripto",
+                    "⚠️ Risiko investasi utama yang wajib diwaspadai minggu ini",
+                ]
+        else:
+            if asset_type == "Saham IDX":
+                quick_prompts_list = [
+                    "📈 Setup teknikal BBCA & BBRI beserta level entry SL TP hari ini",
+                    "🔥 Saham IDX dengan sinyal breakout paling kuat minggu ini",
+                    "🏦 Rekapitulasi foreign net buy/sell terbesar di IHSG hari ini",
+                    "📉 Saham IDX yang oversold dengan potensi reversal terkuat",
+                ]
+            elif asset_type == "Cryptocurrency":
+                quick_prompts_list = [
+                    "⚡ Bitcoin setup entry harian beserta level support resistance kunci",
+                    "🎯 Altcoin dengan momentum terkuat untuk swing trade minggu ini",
+                    "📊 Analisis teknikal BTC & ETH timeframe D1 dan W1 sekarang",
+                    "🔴 Level support kripto kritis yang harus dijaga hari ini",
+                ]
+            else:
+                quick_prompts_list = [
+                    "📊 Kondisi teknikal IHSG & Bitcoin secara bersamaan hari ini",
+                    "⚡ Top 3 trade setup terbaik saham & kripto minggu ini",
+                    "🎯 Saham IDX & kripto dengan Risk/Reward ratio terbaik saat ini",
+                    "📉 Aset yang mendekati zona support & potensi reversal kuat",
+                ]
+
+        qp_cols = st.columns(4)
+        quick_inv_clicked = None
+        for i, qp in enumerate(quick_prompts_list):
+            with qp_cols[i]:
+                if st.button(qp, key=f"inv_qp_{mode}_{asset_type}_{i}", use_container_width=True):
+                    quick_inv_clicked = qp
+
+        # ── SEARCH INPUT ──────────────────────────────────────────────────────
+        st.markdown("<div style='height:.2rem'></div>", unsafe_allow_html=True)
+        inp_c1, inp_c2 = st.columns([5, 1])
+        with inp_c1:
+            inv_input = st.text_input(
+                "inv_query_lbl",
+                placeholder=(
+                    'Contoh: "Analisis fundamental BBCA untuk investasi 2 tahun ke depan, sertakan semua metrik"'
+                    if mode == "investor" else
+                    'Contoh: "Setup trading GOTO hari ini, berikan level entry SL TP yang konkrit"'
+                ),
+                key="inv_query_field",
+                label_visibility="collapsed",
+            )
+        with inp_c2:
+            search_btn_label = "🔍 Analisa" if mode == "investor" else "⚡ Analisa"
+            search_clicked = st.button(search_btn_label, type="primary", use_container_width=True, key="btn_inv_search")
+
+        # ── DETERMINE FINAL QUERY ─────────────────────────────────────────────
+        final_inv_query = None
+        if quick_ticker:
+            suffix_investor = (
+                "Sertakan metrik fundamental lengkap: P/E, PBV, EPS, ROE, Revenue Growth, "
+                "Debt/Equity, Market Cap, Dividend Yield, konsensus analis, dan outlook jangka panjang."
+                if asset_type == "Saham IDX" else
+                "Sertakan metrik: Market Cap, FDV, Volume, Holder Count, Token Unlock, TVL, "
+                "Narasi/Use Case, Sentiment Score, dan developer activity."
+            )
+            suffix_trader = (
+                "Berikan analisis teknikal D1/W1 lengkap: Support S1/S2, Resistance R1/R2, "
+                "MA20/50/200, RSI, MACD, Volume, level Entry/SL/TP konkrit (dalam angka harga), "
+                "Risk/Reward Ratio, dan Broker Summary dengan Foreign Flow."
+                if asset_type == "Saham IDX" else
+                "Berikan analisis teknikal D1/W1: Support S1/S2, Resistance R1/R2, "
+                "MA20/50/200, RSI, MACD, Volume, Funding Rate, Open Interest, "
+                "dan level Entry/SL/TP dalam angka harga yang konkrit."
+            )
+            final_inv_query = (
+                f"Analisis {'fundamental investor' if mode == 'investor' else 'teknikal trader'} "
+                f"untuk {quick_ticker}. {suffix_investor if mode == 'investor' else suffix_trader}"
+            )
+        elif quick_inv_clicked:
+            final_inv_query = quick_inv_clicked
+        elif search_clicked and inv_input.strip():
+            final_inv_query = inv_input.strip()
+
+        # ── EXECUTE ANALYSIS ──────────────────────────────────────────────────
+        if final_inv_query:
+            st.session_state["inv_query"] = final_inv_query
+            st.session_state["inv_result"] = ""
+
+            spinner_msg = (
+                f"🔍 Mencari berita & data fundamental terbaru… *{final_inv_query[:55]}{'…' if len(final_inv_query)>55 else ''}*"
+                if mode == "investor" else
+                f"⚡ Menganalisis data teknikal real-time… *{final_inv_query[:55]}{'…' if len(final_inv_query)>55 else ''}*"
+            )
+            with st.spinner(spinner_msg):
+                result = call_investment_ai_openai(final_inv_query, mode, asset_type)
+
+            st.session_state["inv_result"] = result
+            st.rerun()
+
+        # ── DISPLAY RESULT ────────────────────────────────────────────────────
+        if st.session_state["inv_result"]:
+            mode_label = "📈 Analisis Investor — Fundamental" if mode == "investor" else "⚡ Analisis Trader — Teknikal"
+            mode_color = "#7ab892" if mode == "investor" else "#c8a84b"
+            query_show = st.session_state["inv_query"]
+
+            st.markdown(f"""
+            <div style='background:rgba(8,24,14,0.8);border:1px solid rgba(74,140,92,0.3);
+                        border-radius:14px;padding:1.1rem 1.4rem;margin:1rem 0 .8rem;'>
+              <div style='display:flex;align-items:center;gap:.8rem;margin-bottom:.7rem;'>
+                <span style='color:{mode_color};font-weight:800;font-size:.8rem;
+                             letter-spacing:.7px;text-transform:uppercase;'>{mode_label}</span>
+                <span style='flex:1;height:1px;background:rgba(74,140,92,0.18);'></span>
+                <span style='color:rgba(122,184,146,0.5);font-size:.7rem;'>
+                  🌿 SAMS · {datetime.date.today().strftime("%d %b %Y")}
+                </span>
+              </div>
+              <div style='color:rgba(168,213,181,0.65);font-size:.77rem;font-style:italic;
+                          border-left:3px solid {mode_color};padding-left:.75rem;'>
+                {query_show[:130]}{'…' if len(query_show)>130 else ''}
+              </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+            st.markdown(st.session_state["inv_result"])
+
+            # ── Action row ────────────────────────────────────────────────────
+            act1, act2, act3 = st.columns([1, 1, 2])
+            with act1:
+                if st.button("🔄 Refresh Analisis", key="inv_refresh", use_container_width=True):
+                    with st.spinner("🔄 Memperbarui analisis…"):
+                        new_res = call_investment_ai_openai(
+                            st.session_state["inv_query"], mode, asset_type
+                        )
+                    st.session_state["inv_result"] = new_res
+                    st.rerun()
+            with act2:
+                if st.button("🗑️ Hapus Hasil", key="inv_clear", type="secondary", use_container_width=True):
+                    st.session_state["inv_result"] = ""
+                    st.session_state["inv_query"]  = ""
+                    st.rerun()
+            with act3:
+                st.download_button(
+                    label="📥 Download Analisis (.txt)",
+                    data=(
+                        f"SAMS Investment Analysis\n{'='*55}\n"
+                        f"Mode   : {mode.upper()}\n"
+                        f"Aset   : {asset_type}\n"
+                        f"Query  : {st.session_state['inv_query']}\n"
+                        f"Tanggal: {datetime.date.today()}\n"
+                        f"{'='*55}\n\n"
+                        f"{st.session_state['inv_result']}"
+                    ),
+                    file_name=f"sams_investment_{mode}_{datetime.date.today()}.txt",
+                    mime="text/plain",
+                    use_container_width=True,
+                )
+
+            st.markdown("<hr class='divider'>", unsafe_allow_html=True)
+
+        # ── DISCLAIMER ────────────────────────────────────────────────────────
+        st.markdown("""
+        <div style='background:rgba(200,168,75,0.06);border:1px solid rgba(200,168,75,0.2);
+                    border-radius:12px;padding:.9rem 1.2rem;margin-top:.4rem;'>
+          <div style='color:#c8a84b;font-weight:700;font-size:.78rem;margin-bottom:.3rem;'>
+            ⚠️ DISCLAIMER INVESTASI
+          </div>
+          <div style='color:rgba(200,168,75,0.7);font-size:.73rem;line-height:1.6;'>
+            Analisis ini dibuat oleh AI berdasarkan data publik dan bersifat
+            <strong>informatif saja — bukan rekomendasi investasi.</strong>
+            Keputusan investasi sepenuhnya menjadi tanggung jawab Anda.
+            Selalu lakukan riset mandiri (DYOR) dan konsultasikan dengan advisor keuangan
+            berlisensi sebelum mengambil keputusan investasi.
+            <em>Past performance does not guarantee future results.</em>
+          </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+
 # ── FOOTER ────────────────────────────────────────────────────────────────────
 st.markdown("""
 <div style='text-align:center;margin-top:2rem;padding:1.2rem 0;
@@ -1437,7 +1965,7 @@ st.markdown("""
     🌿 SAMS Agent
   </div>
   <div style='color:rgba(122,184,146,.45);font-size:.7rem;letter-spacing:1.5px;text-transform:uppercase;margin-top:.2rem'>
-    Financial Agent · Todo Task Agent · Built with Sustainable Spirit
+    Financial Agent · Todo Task Agent · AI Investment · Built with Sustainable Spirit
   </div>
 </div>
 """, unsafe_allow_html=True)
