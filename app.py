@@ -164,6 +164,51 @@ html, body, [data-testid="stApp"] {
 }
 .metric-chip .val { color:#c8a84b;font-weight:700; }
 
+/* ── FIX 1: Tab font visibility for both dark & light mode ── */
+[data-testid="stTabs"] [data-baseweb="tab-list"] {
+    background: rgba(13, 35, 24, 0.85) !important;
+    border-radius: 12px !important;
+    padding: 4px !important;
+    border: 1px solid rgba(74,140,92,0.25) !important;
+    gap: 2px !important;
+}
+[data-testid="stTabs"] [data-baseweb="tab"] {
+    background: transparent !important;
+    border-radius: 9px !important;
+    padding: 8px 14px !important;
+    border: none !important;
+    font-family: 'Plus Jakarta Sans', sans-serif !important;
+    font-weight: 600 !important;
+    font-size: 0.82rem !important;
+    color: rgba(168, 213, 181, 0.75) !important;
+    -webkit-text-fill-color: rgba(168, 213, 181, 0.75) !important;
+    transition: all 0.2s ease !important;
+    white-space: nowrap !important;
+}
+[data-testid="stTabs"] [data-baseweb="tab"]:hover {
+    background: rgba(74,140,92,0.15) !important;
+    color: #a8d5b5 !important;
+    -webkit-text-fill-color: #a8d5b5 !important;
+}
+[data-testid="stTabs"] [aria-selected="true"] {
+    background: linear-gradient(135deg, rgba(45,90,61,0.9), rgba(74,140,92,0.7)) !important;
+    color: #ffffff !important;
+    -webkit-text-fill-color: #ffffff !important;
+    font-weight: 700 !important;
+    box-shadow: 0 2px 10px rgba(74,140,92,0.4) !important;
+}
+[data-testid="stTabs"] [data-baseweb="tab-highlight"] {
+    display: none !important;
+}
+[data-testid="stTabs"] [data-baseweb="tab-border"] {
+    display: none !important;
+}
+/* Tab panel content area */
+[data-testid="stTabs"] [data-baseweb="tab-panel"] {
+    color: #e8f5ec !important;
+    padding-top: 1rem !important;
+}
+
 #MainMenu, footer, header { visibility:hidden !important; }
 </style>
 """, unsafe_allow_html=True)
@@ -731,20 +776,296 @@ WAJIB SERTAKAN metrik teknikal berikut untuk SETIAP aset yang dianalisis:
 - Broker dengan akumulasi terbesar (top 3)
 - Rekomendasi konsensus analis + target price
 
-FORMAT RESPONS WAJIB:
-## 📊 Kondisi Market Hari Ini
-[IHSG / BTC Dominance + sentimen market]
+CHART DATA — WAJIB DISERTAKAN:
+Di akhir analisis, sertakan data chart dalam format JSON untuk visualisasi.
+Tulis blok JSON berikut PERSIS seperti ini (satu blok, valid JSON):
 
-## 🎯 Analisis Aset Pilihan
-[3-4 aset dengan setup teknikal lengkap per aset]
+```chart_data
+{
+  "ticker": "NAMA_TICKER",
+  "asset_type": "saham atau kripto",
+  "current_price": ANGKA,
+  "candles": [
+    {"date": "YYYY-MM-DD", "label": "Hari -2", "open": ANGKA, "high": ANGKA, "low": ANGKA, "close": ANGKA, "volume": ANGKA},
+    {"date": "YYYY-MM-DD", "label": "Kemarin", "open": ANGKA, "high": ANGKA, "low": ANGKA, "close": ANGKA, "volume": ANGKA},
+    {"date": "YYYY-MM-DD", "label": "Hari Ini", "open": ANGKA, "high": ANGKA, "low": ANGKA, "close": ANGKA, "volume": ANGKA}
+  ],
+  "levels": {
+    "s1": ANGKA,
+    "s2": ANGKA,
+    "r1": ANGKA,
+    "r2": ANGKA,
+    "ma20": ANGKA,
+    "ma50": ANGKA,
+    "ma200": ANGKA,
+    "entry": ANGKA,
+    "sl": ANGKA,
+    "tp1": ANGKA,
+    "tp2": ANGKA
+  },
+  "pattern": "ascending_triangle atau descending_triangle atau double_bottom atau double_top atau bull_flag atau bear_flag atau none",
+  "trend": "uptrend atau downtrend atau sideways",
+  "rsi": ANGKA,
+  "macd_signal": "bullish atau bearish"
+}
+```
 
-## 👀 Watchlist Trader Minggu Ini
-[5 aset yang perlu dipantau dengan level kunci]
+Gunakan angka harga yang SPESIFIK dan KONKRIT berdasarkan data real. Cantumkan sumber data. Bahasa Indonesia presisi."""
 
-## ⚡ Sinyal Penting yang Wajib Dipantau
-[alert teknikal kritis]
 
-Gunakan angka harga yang SPESIFIK dan KONKRIT. Cantumkan sumber data. Bahasa Indonesia presisi."""
+def parse_chart_data_from_ai(text: str) -> Optional[dict]:
+    """Extract chart_data JSON block from AI response."""
+    # Try ```chart_data ... ``` block
+    m = re.search(r'```chart_data\s*\n(.*?)\n```', text, re.DOTALL)
+    if m:
+        try:
+            return json.loads(m.group(1).strip())
+        except Exception:
+            pass
+    # Fallback: find raw JSON with "candles" key
+    m2 = re.search(r'\{[^{}]*"candles"[^{}]*\[.*?\]\s*,.*?\}', text, re.DOTALL)
+    if m2:
+        try:
+            return json.loads(m2.group())
+        except Exception:
+            pass
+    return None
+
+
+def render_trader_chart(chart_data: dict):
+    """
+    Render a 3-day candlestick chart with technical markers:
+    Support, Resistance, Moving Averages, Entry/SL/TP, pattern annotations.
+    """
+    try:
+        import plotly.graph_objects as go
+        from plotly.subplots import make_subplots
+
+        candles = chart_data.get("candles", [])
+        levels  = chart_data.get("levels", {})
+        ticker  = chart_data.get("ticker", "")
+        trend   = chart_data.get("trend", "sideways")
+        pattern = chart_data.get("pattern", "none")
+        rsi_val = chart_data.get("rsi", 50)
+        macd_sig = chart_data.get("macd_signal", "neutral")
+
+        if not candles or len(candles) < 1:
+            return
+
+        dates  = [c["date"]   for c in candles]
+        labels = [c.get("label", c["date"]) for c in candles]
+        opens  = [c["open"]   for c in candles]
+        highs  = [c["high"]   for c in candles]
+        lows   = [c["low"]    for c in candles]
+        closes = [c["close"]  for c in candles]
+        vols   = [c.get("volume", 0) for c in candles]
+
+        # Price range for axis padding
+        all_prices = opens + highs + lows + closes
+        level_vals = [v for v in levels.values() if v and v > 0]
+        all_prices += level_vals
+        price_min = min(all_prices) * 0.985
+        price_max = max(all_prices) * 1.015
+
+        fig = make_subplots(
+            rows=2, cols=1,
+            shared_xaxes=True,
+            row_heights=[0.72, 0.28],
+            vertical_spacing=0.04,
+        )
+
+        # ── Candlestick ──────────────────────────────────────────────────────
+        fig.add_trace(go.Candlestick(
+            x=labels,
+            open=opens, high=highs, low=lows, close=closes,
+            name=ticker,
+            increasing=dict(line=dict(color="#4ade80", width=2), fillcolor="rgba(74,222,128,0.85)"),
+            decreasing=dict(line=dict(color="#f87171", width=2), fillcolor="rgba(248,113,113,0.85)"),
+            whiskerwidth=0.6,
+        ), row=1, col=1)
+
+        # ── Volume bars ──────────────────────────────────────────────────────
+        vol_colors = ["rgba(74,222,128,0.55)" if closes[i] >= opens[i] else "rgba(248,113,113,0.55)"
+                      for i in range(len(candles))]
+        fig.add_trace(go.Bar(
+            x=labels, y=vols,
+            name="Volume",
+            marker_color=vol_colors,
+            showlegend=False,
+        ), row=2, col=1)
+
+        def add_hline(price, color, dash, name, row=1, width=1.5, annotation_text=None, annotation_side="right"):
+            fig.add_hline(
+                y=price, line=dict(color=color, dash=dash, width=width),
+                annotation_text=annotation_text or name,
+                annotation_position=f"top {annotation_side}",
+                annotation=dict(
+                    font=dict(color=color, size=10, family="Plus Jakarta Sans"),
+                    bgcolor="rgba(13,35,24,0.85)",
+                    bordercolor=color,
+                    borderwidth=1,
+                    borderpad=3,
+                ),
+                row=row, col=1,
+            )
+
+        # ── Support levels ───────────────────────────────────────────────────
+        if levels.get("s1"):
+            add_hline(levels["s1"], "#22c55e", "dot", "S1",
+                      annotation_text=f"S1 {levels['s1']:,.0f}", annotation_side="left")
+        if levels.get("s2"):
+            add_hline(levels["s2"], "#16a34a", "dot", "S2",
+                      annotation_text=f"S2 {levels['s2']:,.0f}", annotation_side="left")
+
+        # ── Resistance levels ────────────────────────────────────────────────
+        if levels.get("r1"):
+            add_hline(levels["r1"], "#f97316", "dot", "R1",
+                      annotation_text=f"R1 {levels['r1']:,.0f}", annotation_side="right")
+        if levels.get("r2"):
+            add_hline(levels["r2"], "#ea580c", "dot", "R2",
+                      annotation_text=f"R2 {levels['r2']:,.0f}", annotation_side="right")
+
+        # ── Moving Averages ──────────────────────────────────────────────────
+        if levels.get("ma20"):
+            add_hline(levels["ma20"], "#60a5fa", "solid", "MA20",
+                      annotation_text=f"MA20 {levels['ma20']:,.0f}", width=1.2)
+        if levels.get("ma50"):
+            add_hline(levels["ma50"], "#a78bfa", "solid", "MA50",
+                      annotation_text=f"MA50 {levels['ma50']:,.0f}", width=1.2,
+                      annotation_side="left")
+        if levels.get("ma200"):
+            add_hline(levels["ma200"], "#f472b6", "dash", "MA200",
+                      annotation_text=f"MA200 {levels['ma200']:,.0f}", width=1.5,
+                      annotation_side="left")
+
+        # ── Entry / SL / TP markers ──────────────────────────────────────────
+        if levels.get("entry"):
+            add_hline(levels["entry"], "#facc15", "dashdot", "Entry",
+                      annotation_text=f"📍 Entry {levels['entry']:,.0f}", width=2,
+                      annotation_side="right")
+        if levels.get("sl"):
+            add_hline(levels["sl"], "#ef4444", "dash", "SL",
+                      annotation_text=f"🛑 SL {levels['sl']:,.0f}", width=1.8,
+                      annotation_side="right")
+        if levels.get("tp1"):
+            add_hline(levels["tp1"], "#34d399", "dash", "TP1",
+                      annotation_text=f"🎯 TP1 {levels['tp1']:,.0f}", width=1.8,
+                      annotation_side="right")
+        if levels.get("tp2"):
+            add_hline(levels["tp2"], "#10b981", "dashdot", "TP2",
+                      annotation_text=f"🎯 TP2 {levels['tp2']:,.0f}", width=1.8,
+                      annotation_side="left")
+
+        # ── Pattern annotation (ascending/descending triangle, etc.) ─────────
+        PATTERN_LABELS = {
+            "ascending_triangle":  "▲ Ascending Triangle",
+            "descending_triangle": "▽ Descending Triangle",
+            "double_bottom":       "W Double Bottom",
+            "double_top":          "M Double Top",
+            "bull_flag":           "🚩 Bull Flag",
+            "bear_flag":           "🚩 Bear Flag",
+        }
+        pattern_label = PATTERN_LABELS.get(pattern, "")
+        if pattern_label:
+            # Draw a shaded box across the full chart to highlight the pattern
+            fig.add_vrect(
+                x0=labels[0], x1=labels[-1],
+                fillcolor="rgba(250,204,21,0.05)",
+                layer="below",
+                line_width=0,
+                annotation_text=pattern_label,
+                annotation_position="top left",
+                annotation=dict(
+                    font=dict(color="#facc15", size=11, family="Plus Jakarta Sans"),
+                    bgcolor="rgba(13,35,24,0.8)",
+                    bordercolor="#facc15",
+                    borderwidth=1,
+                ),
+                row=1, col=1,
+            )
+
+        # ── RSI & MACD badge in title ────────────────────────────────────────
+        trend_emoji = {"uptrend": "📈", "downtrend": "📉", "sideways": "➡️"}.get(trend, "➡️")
+        macd_emoji  = "🟢" if macd_sig == "bullish" else "🔴"
+        rsi_status  = "OB ⚠️" if rsi_val >= 70 else ("OS 💡" if rsi_val <= 30 else "Netral")
+        chart_title = (
+            f"<b style='font-size:14px;color:#a8d5b5'>{ticker}</b> "
+            f"<span style='font-size:11px;color:#7ab892'> — 3-Day Candlestick Chart</span>"
+            f"<br><span style='font-size:10px;color:#c8a84b'>"
+            f"{trend_emoji} {trend.capitalize()}  |  RSI {rsi_val:.0f} ({rsi_status})  |  MACD {macd_emoji} {macd_sig.capitalize()}"
+            f"</span>"
+        )
+
+        # ── Layout ───────────────────────────────────────────────────────────
+        fig.update_layout(
+            title=dict(text=chart_title, x=0.01, xanchor="left",
+                       font=dict(family="Plus Jakarta Sans")),
+            plot_bgcolor="rgba(8,20,14,0.95)",
+            paper_bgcolor="rgba(0,0,0,0)",
+            font=dict(color="#a8d5b5", family="Plus Jakarta Sans", size=11),
+            xaxis=dict(
+                rangeslider=dict(visible=False),
+                gridcolor="rgba(74,140,92,0.1)",
+                color="#7ab892",
+                showgrid=True,
+            ),
+            xaxis2=dict(
+                gridcolor="rgba(74,140,92,0.1)",
+                color="#7ab892",
+            ),
+            yaxis=dict(
+                range=[price_min, price_max],
+                gridcolor="rgba(74,140,92,0.12)",
+                color="#7ab892",
+                tickformat=",.0f",
+                side="right",
+            ),
+            yaxis2=dict(
+                gridcolor="rgba(74,140,92,0.08)",
+                color="#7ab892",
+                title="Vol",
+                title_font=dict(size=9),
+            ),
+            legend=dict(
+                bgcolor="rgba(13,35,24,0.7)",
+                bordercolor="rgba(74,140,92,0.3)",
+                borderwidth=1,
+                font=dict(size=10),
+                x=0.01, y=0.99,
+            ),
+            margin=dict(t=80, b=20, l=10, r=90),
+            height=500,
+            hovermode="x unified",
+        )
+
+        # Custom hover for candlestick
+        fig.update_traces(
+            selector=dict(type="candlestick"),
+            hoverlabel=dict(bgcolor="rgba(13,35,24,0.95)", bordercolor="#4a8c5c",
+                            font=dict(color="#a8d5b5", size=11)),
+        )
+
+        st.plotly_chart(fig, use_container_width=True)
+
+        # ── Legend / key below chart ─────────────────────────────────────────
+        st.markdown("""
+        <div style='display:flex;flex-wrap:wrap;gap:8px;margin-top:.3rem;margin-bottom:.5rem;'>
+          <span style='font-size:.7rem;color:#22c55e;'>● S1/S2 Support</span>
+          <span style='font-size:.7rem;color:#f97316;'>● R1/R2 Resistance</span>
+          <span style='font-size:.7rem;color:#60a5fa;'>— MA20</span>
+          <span style='font-size:.7rem;color:#a78bfa;'>— MA50</span>
+          <span style='font-size:.7rem;color:#f472b6;'>- - MA200</span>
+          <span style='font-size:.7rem;color:#facc15;'>-·- Entry</span>
+          <span style='font-size:.7rem;color:#ef4444;'>- - Stop Loss</span>
+          <span style='font-size:.7rem;color:#34d399;'>- - TP1</span>
+          <span style='font-size:.7rem;color:#10b981;'>-·- TP2</span>
+        </div>
+        """, unsafe_allow_html=True)
+
+    except ImportError:
+        st.info("Install plotly untuk chart: `pip install plotly`")
+    except Exception as e:
+        st.warning(f"Chart render error: {e}")
 
 
 def call_investment_ai_openai(query: str, mode: str, asset_type: str) -> str:
@@ -1687,6 +2008,8 @@ with tab_invest:
                     Time frame <strong style='color:#c8a84b;'>1 hari hingga 1 minggu</strong>.
                     Analisis teknikal lengkap dengan level harga konkrit, broker summary,
                     dan foreign flow untuk saham IDX.
+                    <strong style='color:#a8d5b5;'>Dilengkapi chart candlestick 3 hari</strong>
+                    dengan marker Support, Resistance, MA, Entry/SL/TP, dan pattern notasi.
                   </div>
                   <div style='margin-top:.6rem;display:flex;flex-wrap:wrap;gap:4px;'>
                     <span class='metric-chip'>Support S1/S2</span>
@@ -1701,6 +2024,7 @@ with tab_invest:
                     <span class='metric-chip'>Foreign Flow</span>
                     <span class='metric-chip'>Broker Summary</span>
                     <span class='metric-chip'>Konsensus Analis</span>
+                    <span class='metric-chip' style='border-color:rgba(200,168,75,.4);color:#c8a84b;'>📊 Chart Teknikal</span>
                   </div>
                 </div>
               </div>
@@ -1845,20 +2169,28 @@ with tab_invest:
             suffix_trader = (
                 "Berikan analisis teknikal D1/W1 lengkap: Support S1/S2, Resistance R1/R2, "
                 "MA20/50/200, RSI, MACD, Volume, level Entry/SL/TP konkrit (dalam angka harga), "
-                "Risk/Reward Ratio, dan Broker Summary dengan Foreign Flow."
+                "Risk/Reward Ratio, dan Broker Summary dengan Foreign Flow. "
+                "WAJIB sertakan blok ```chart_data dengan data OHLCV 3 hari terakhir dan semua level teknikal."
                 if asset_type == "Saham IDX" else
                 "Berikan analisis teknikal D1/W1: Support S1/S2, Resistance R1/R2, "
                 "MA20/50/200, RSI, MACD, Volume, Funding Rate, Open Interest, "
-                "dan level Entry/SL/TP dalam angka harga yang konkrit."
+                "dan level Entry/SL/TP dalam angka harga yang konkrit. "
+                "WAJIB sertakan blok ```chart_data dengan data OHLCV 3 hari terakhir dan semua level teknikal."
             )
             final_inv_query = (
                 f"Analisis {'fundamental investor' if mode == 'investor' else 'teknikal trader'} "
                 f"untuk {quick_ticker}. {suffix_investor if mode == 'investor' else suffix_trader}"
             )
         elif quick_inv_clicked:
-            final_inv_query = quick_inv_clicked
+            if mode == "trader":
+                final_inv_query = quick_inv_clicked + " WAJIB sertakan blok ```chart_data dengan data OHLCV 3 hari dan semua level teknikal."
+            else:
+                final_inv_query = quick_inv_clicked
         elif search_clicked and inv_input.strip():
-            final_inv_query = inv_input.strip()
+            if mode == "trader":
+                final_inv_query = inv_input.strip() + " WAJIB sertakan blok ```chart_data dengan data OHLCV 3 hari dan semua level teknikal."
+            else:
+                final_inv_query = inv_input.strip()
 
         # ── EXECUTE ANALYSIS ──────────────────────────────────────────────────
         if final_inv_query:
@@ -1868,7 +2200,7 @@ with tab_invest:
             spinner_msg = (
                 f"🔍 Mencari berita & data fundamental terbaru… *{final_inv_query[:55]}{'…' if len(final_inv_query)>55 else ''}*"
                 if mode == "investor" else
-                f"⚡ Menganalisis data teknikal real-time… *{final_inv_query[:55]}{'…' if len(final_inv_query)>55 else ''}*"
+                f"⚡ Menganalisis data teknikal + membangun chart… *{final_inv_query[:55]}{'…' if len(final_inv_query)>55 else ''}*"
             )
             with st.spinner(spinner_msg):
                 result = call_investment_ai_openai(final_inv_query, mode, asset_type)
@@ -1900,7 +2232,34 @@ with tab_invest:
             </div>
             """, unsafe_allow_html=True)
 
-            st.markdown(st.session_state["inv_result"])
+            # ── FIX 2: Render trader chart BEFORE text if mode == trader ────
+            result_text = st.session_state["inv_result"]
+            if mode == "trader":
+                chart_data = parse_chart_data_from_ai(result_text)
+                if chart_data:
+                    st.markdown("""
+                    <div style='background:rgba(8,20,14,0.9);border:1px solid rgba(200,168,75,0.3);
+                                border-radius:14px;padding:.8rem 1rem .4rem;margin-bottom:.8rem;'>
+                      <div style='color:#c8a84b;font-size:.78rem;font-weight:700;
+                                  letter-spacing:.7px;text-transform:uppercase;margin-bottom:.5rem;'>
+                        📊 Chart Teknikal — 3 Hari Terakhir
+                      </div>
+                    """, unsafe_allow_html=True)
+                    render_trader_chart(chart_data)
+                    st.markdown("</div>", unsafe_allow_html=True)
+                else:
+                    st.markdown("""
+                    <div style='background:rgba(200,168,75,0.06);border:1px solid rgba(200,168,75,0.2);
+                                border-radius:10px;padding:.6rem 1rem;margin-bottom:.6rem;
+                                color:rgba(200,168,75,0.7);font-size:.75rem;'>
+                      ⚠️ Data chart teknikal tidak tersedia untuk analisis ini.
+                      Coba klik ticker spesifik dari watchlist untuk mendapatkan chart lengkap.
+                    </div>
+                    """, unsafe_allow_html=True)
+
+            # Clean and display the text (hide raw chart_data block)
+            clean_text = re.sub(r'```chart_data.*?```', '', result_text, flags=re.DOTALL).strip()
+            st.markdown(clean_text)
 
             # ── Action row ────────────────────────────────────────────────────
             act1, act2, act3 = st.columns([1, 1, 2])
